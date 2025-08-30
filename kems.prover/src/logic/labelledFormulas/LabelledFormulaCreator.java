@@ -1,18 +1,15 @@
 package logic.labelledFormulas;
 
-import ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer;
-import ConversorWagnerSATLIB.ConversorWagnerSATLIBParser;
 import logic.formulas.FormulaFactory;
 import logic.problem.Problem;
+import logic.signedFormulas.SignedFormula;
+import logic.labelledFormulas.FormulaLabel;
 import parsers.ParserUser;
+import logicalSystems.ipl.IPLSignedFormulaFactory;
 
 public class LabelledFormulaCreator {
 
-
-	private static final String IPL_PARSER = "satpablo.satpabloParser";
-	private static final String IPL_LEXER = "satpablo.satpabloLexer";
-
-	private LabelledFormulaFactory _sff;
+	private LabelledFormulaFactory _lff;
 
 	private FormulaFactory _ff;
 
@@ -23,12 +20,17 @@ public class LabelledFormulaCreator {
 	boolean _twoPhases = false;
 
 	/**
-	 * Creates a SignedFormulaCreator for a default lib dir.
+	 * Creates a LabelledFormulaCreator for a default lib dir.
 	 * 
 	 * @param packageName
 	 */
 	public LabelledFormulaCreator(String packageName) {
-		_sff = new LabelledFormulaFactory();
+		// Para IPL, usar IPLSignedFormulaFactory que maneja ContextFormulaLabel
+		if ("ipl".equals(packageName)) {
+			_lff = new IPLSignedFormulaFactory();
+		} else {
+			_lff = new LabelledFormulaFactory();
+		}
 		_ff = new FormulaFactory();
 		_packageName = packageName;
 	}
@@ -43,32 +45,59 @@ public class LabelledFormulaCreator {
 
 	public Problem parseText(String signedFormulasAsString) {
 		signedFormulasAsString = removeUselessCharacters(signedFormulasAsString);
-
-		String s;
-
+	
 		ParserUser pu1 = new ParserUser();
+	
+		_problem = (Problem) pu1.parseString(
+			_packageName + "." + _packageName + "Lexer",
+			_packageName + "." + _packageName + "Parser",
+			signedFormulasAsString);
+	
 
-		_problem = (Problem) pu1.parseString(IPL_LEXER, IPL_PARSER,
-				signedFormulasAsString);
-
-		_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
-
+		
+		// Clone all formulas from the problem to our factory
+		if (_problem.getSignedFormulaFactory() instanceof LabelledFormulaFactory) {
+			LabelledFormulaFactory problemLff = (LabelledFormulaFactory) _problem.getSignedFormulaFactory();
+			_lff.cloneAll(problemLff, _ff);
+		} else {
+			// If the problem doesn't have a LabelledFormulaFactory, create one
+			_lff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+		}
+	
 		return _problem;
 	}
 
 	/**
 	 * Converts a string to a labelled formula.
 	 * 
-	 * @param signedFormulaAsString
+	 * @param labelledFormulaAsString
 	 * @return
 	 */
 	public LabelledFormula parseString(String labelledFormulaAsString) {
 
 		this.parseText(labelledFormulaAsString);
 
-		return (LabelledFormula) _sff.getLabelledFormulas().get(
-				_problem.getSignedFormulaFactory().getLastSignedFormulaAdded()
-						.toString());
+		// Get the last signed formula added and convert it to a labelled formula
+		SignedFormula lastSignedFormula = _problem.getSignedFormulaFactory().getLastSignedFormulaAdded();
+		if (lastSignedFormula != null) {
+
+			
+			// Create a new labelled formula with the last signed formula
+			// Preserve the label from the parsed formula
+			FormulaLabel label = lastSignedFormula.getLabel();
+			if (label == null || label.equals(FormulaLabel.empty())) {
+				// Para IPL, usar ContextFormulaLabel desde la factory
+				if (_lff instanceof IPLSignedFormulaFactory) {
+					IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) _lff;
+					label = iplFactory.getContext().getNewFormulaLabel(); // ContextFormulaLabel
+				} else {
+					label = FormulaLabel.constant(0); // Fallback para otras lógicas
+				}
+			}
+			return _lff.createLabelledFormula(lastSignedFormula);
+		}
+		
+		return null;
 	}
 
 	public Problem parseFile(String completeFilename) {
@@ -77,20 +106,30 @@ public class LabelledFormulaCreator {
 		if (_twoPhases) {
 			ParserUser pu1 = new ParserUser();
 
-			s = (String) pu1.parseFile(IPL_LEXER, IPL_PARSER, completeFilename);
+			s = (String) pu1.parseFile(_packageName + "." + _packageName + "Lexer", _packageName + "." + _packageName + "Parser", completeFilename);
 
 			ParserUser pu2 = new ParserUser();
 			_problem = (Problem) pu2.parseString(_packageName + "."
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", s);
-			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			if (_problem.getSignedFormulaFactory() instanceof LabelledFormulaFactory) {
+				LabelledFormulaFactory problemLff = (LabelledFormulaFactory) _problem.getSignedFormulaFactory();
+				_lff.cloneAll(problemLff, _ff);
+			} else {
+				_lff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			}
 		} else {
 			ParserUser pu2 = new ParserUser();
 			_problem = (Problem) pu2.parseFile(_packageName + "."
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", completeFilename);
 
-			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			if (_problem.getSignedFormulaFactory() instanceof LabelledFormulaFactory) {
+				LabelledFormulaFactory problemLff = (LabelledFormulaFactory) _problem.getSignedFormulaFactory();
+				_lff.cloneAll(problemLff, _ff);
+			} else {
+				_lff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			}
 		}
 
 		_problem.setFilename(completeFilename);
@@ -100,16 +139,17 @@ public class LabelledFormulaCreator {
 
 	}
 
-	public LabelledFormulaFactory getSignedFormulaFactory() {
-		return _sff;
+	public LabelledFormulaFactory getLabelledFormulaFactory() {
+		return _lff;
 	}
 
 	public FormulaFactory getFormulaFactory() {
 		return _ff;
 	}
 
-	public LabelledFormulaFactory getLabelledFormulaFactory() {
-		return _sff;
+	// Keep for backward compatibility
+	public LabelledFormulaFactory getSignedFormulaFactory() {
+		return _lff;
 	}
 
 }

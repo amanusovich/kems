@@ -53,7 +53,7 @@ public class SignedFormulaFactory {
 
         SignedFormula sf;
         _signedFormulas.put(SignedFormula.toString(sign, formula, formulaLabel),
-        sf = new SignedFormula(sign, formula));
+        sf = new SignedFormula(sign, formula, formulaLabel));
 
         _lastSignedFormulaAdded = sf;
 

@@ -11,7 +11,10 @@ import java.util.List;
 import logic.formulas.CompositeFormula;
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.SignedFormulaBuilder;
+import logic.signedFormulas.SignedFormulaFactory;
+import logic.labelledFormulas.LabelledFormula;
 import logic.signedFormulas.SignedFormulaList;
+import logic.labelledFormulas.LabelledFormulaFactory;
 import main.newstrategy.ISimpleStrategy;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.SignedFormulaNodeState;
@@ -98,8 +101,18 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 proofTree.removeFromPBCandidates(sf, SignedFormulaNodeState.ANALYSED);
 
                 for (int j = 0; j < sfl.size(); j++) {
-                    proofTree.addLast(new SignedFormulaNode(sfl.get(j), SignedFormulaNodeState.NOT_ANALYSED,
+                    SignedFormula newFormula = sfl.get(j);
+                    
+                    // Usar SignedFormulaNode para compatibilidad con ClassicalProofTree
+                    // El contenido puede ser LabelledFormula (con etiqueta) o SignedFormula regular
+                    proofTree.addLast(new SignedFormulaNode(newFormula, SignedFormulaNodeState.NOT_ANALYSED,
                             strategy.createOrigin(r, proofTree.getNode(sf), null)));
+                    
+                    // Debug: Verificar si la fórmula tiene etiqueta
+                    if (newFormula instanceof LabelledFormula) {
+                        LabelledFormula lf = (LabelledFormula) newFormula;
+                        System.out.println("✅ IPL: Fórmula con etiqueta creada: " + lf.toString());
+                    }
                 }
             }
 
@@ -138,8 +151,16 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
 
     private List<Rule> getOnePremiseRuleList(ClassicalProofTree cpt, SignedFormula sf) {
 
-        IPLOnePremiseRuleList onePremiseRules = (IPLOnePremiseRuleList) strategy.getMethod().getRules()
-                .get(ruleListName);
+        Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
+        
+        // Verificar que sea realmente un IPLOnePremiseRuleList
+        if (!(ruleListObject instanceof IPLOnePremiseRuleList)) {
+            System.err.println("Error: Expected IPLOnePremiseRuleList but got " + 
+                             (ruleListObject != null ? ruleListObject.getClass().getName() : "null"));
+            return new ArrayList<Rule>();
+        }
+        
+        IPLOnePremiseRuleList onePremiseRules = (IPLOnePremiseRuleList) ruleListObject;
 
         if (sf.getFormula() instanceof CompositeFormula) {
             return onePremiseRules.getMany(((CompositeFormula) sf.getFormula()).getConnective(), sf.getSign());

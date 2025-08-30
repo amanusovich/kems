@@ -50,14 +50,26 @@ public class KELabelledAction extends rules.KEAction {
 
 	public LabelledFormula getLabelledFormula( SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList lfl) {
-		LabelledFormulaFactory lff = (LabelledFormulaFactory) sff;
+		// Verificación segura para IPL
+		LabelledFormulaFactory lff;
+		if (sff instanceof LabelledFormulaFactory) {
+			lff = (LabelledFormulaFactory) sff;
+		} else {
+			lff = new LabelledFormulaFactory();
+		}
 		SignedFormula sf = getContent().getSignedFormula(sff, ff, lfl);
 		return lff.createLabelledFormula(this.labelGetter.getLabel(lfl), sf);
 	}
 
 	public LabelledFormula getLabelledFormula( SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList lfl, FormulaLabel label) {
-		LabelledFormulaFactory lff = (LabelledFormulaFactory) sff;
+		// Verificación segura para IPL
+		LabelledFormulaFactory lff;
+		if (sff instanceof LabelledFormulaFactory) {
+			lff = (LabelledFormulaFactory) sff;
+		} else {
+			lff = new LabelledFormulaFactory();
+		}
 		SignedFormula sf = getContent().getSignedFormula(sff, ff, lfl);
 		return lff.createLabelledFormula(label, sf);
 	}

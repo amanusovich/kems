@@ -63,7 +63,7 @@ public class BinaryTwoPremisesConnectiveGetter implements KESignedFormulaGetter{
         Formula left = (Formula) (KERuleRole.LEFT.getFormulas(sfMain.getFormula()).get(0));
         Formula right = (Formula)(KERuleRole.RIGHT.getFormulas(sfMain.getFormula()).get(0));
         
-        if (sfAux.getFormula() ==  left){
+        if (sfAux.getFormula().equals(left)){
             return sff.createSignedFormula(_sign, right);
         }
         else{

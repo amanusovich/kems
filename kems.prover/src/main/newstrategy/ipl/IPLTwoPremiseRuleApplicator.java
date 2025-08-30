@@ -66,10 +66,19 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 		// para cada main, procurar referencias a um dos dois possiveis
 		// auxiliary candidates
 		// se encontrar, entao aplicar
+		System.out.println("DEBUG: IPLTwoPremiseRuleApplicator.applyAll called");
 		boolean hasApplied = false;
 
-		IPLConnectiveRoleSignRuleList twoPremiseRules = (IPLConnectiveRoleSignRuleList) strategy
-				.getMethod().getRules().get(ruleListName);
+		Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
+		
+		// Verificar que sea realmente un IPLConnectiveRoleSignRuleList
+		if (!(ruleListObject instanceof IPLConnectiveRoleSignRuleList)) {
+			System.err.println("Error: Expected IPLConnectiveRoleSignRuleList but got " + 
+							 (ruleListObject != null ? ruleListObject.getClass().getName() : "null"));
+			return false;
+		}
+		
+		IPLConnectiveRoleSignRuleList twoPremiseRules = (IPLConnectiveRoleSignRuleList) ruleListObject;
 
 		SignedFormula mainCandidate;
 
@@ -78,12 +87,13 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
 		while ((mainCandidate = nextMainCandidate(strategy.getProofTree(), null)) != null) {
 
-//			System.out.println("MAIN CANDIDATE: " + mainCandidate);
+			System.out.println("DEBUG: MAIN CANDIDATE: " + mainCandidate);
 
 			Connective mainConnective = ((CompositeFormula) mainCandidate
 					.getFormula()).getConnective();
 			FormulaSign mainSign = mainCandidate.getSign();
 
+			System.out.println("DEBUG: Main connective: " + mainConnective + ", main sign: " + mainSign);
 
 			/*
 			Rule left_rule = twoPremiseRules.get(mainConnective,
@@ -96,11 +106,15 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 					KERuleRole.LEFT, mainSign);
 			List<Rule> rightRules = twoPremiseRules.getMany(mainConnective,
 					KERuleRole.RIGHT, mainSign);
+			
+			System.out.println("DEBUG: Left rules found: " + leftRules);
+			System.out.println("DEBUG: Right rules found: " + rightRules);
 
 			for (Iterator<Rule> it = leftRules.iterator(); it.hasNext();) {
 				if (hasApplied)
 					break;
 				Rule left_rule = it.next();
+				System.out.println("DEBUG: Trying left rule: " + left_rule);
 				for (Iterator<Rule> it2 = rightRules.iterator(); it2.hasNext();) {
 					if (hasApplied)
 						break;
@@ -110,8 +124,10 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 					boolean appliedLeft = false;
 					// verifies if left rule can be applied. If it can apply it.
 					if (left_rule != null) {
+						System.out.println("DEBUG: Attempting to apply left rule: " + left_rule);
 						appliedLeft = tryToApplyTwoPremiseRule(strategy
 								.getCurrent(), sfb, mainCandidate, left_rule);
+						System.out.println("DEBUG: Left rule applied: " + appliedLeft);
 						hasApplied = hasApplied || appliedLeft;
 						if (appliedLeft)
 							counterMainCandidates--;
@@ -190,15 +206,29 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 	private boolean tryToApplyTwoPremiseRule(ClassicalProofTree proofTree,
 			SignedFormulaBuilder sfb, SignedFormula mainCandidate, Rule rule) {
 
+		System.out.println("DEBUG: tryToApplyTwoPremiseRule for rule: " + rule + " with main: " + mainCandidate);
 		boolean hasApplied = false;
 
 		TwoPremisesOneConclusionRule aRule = ((TwoPremisesOneConclusionRule) rule);
 
+		// Verificar que el factory sea realmente LabelledFormulaFactory para IPL
+		SignedFormulaFactory signedFactory = sfb.getSignedFormulaFactory();
+		LabelledFormulaFactory labelledFactory;
+		
+		if (signedFactory instanceof LabelledFormulaFactory) {
+			labelledFactory = (LabelledFormulaFactory) signedFactory;
+		} else {
+			// Para IPL, crear una LabelledFormulaFactory si no existe
+			labelledFactory = new LabelledFormulaFactory();
+		}
+		
 		SignedFormulaList sfl = aRule.getAuxiliaryCandidates(
-				(LabelledFormulaFactory) sfb.getSignedFormulaFactory(),
+				labelledFactory,
 				sfb.getSignedFormulaFactory(), 
 				sfb.getFormulaFactory(),
 				mainCandidate);
+
+		System.out.println("DEBUG: Auxiliary candidates: " + sfl);
 
 		/*
 		public SignedFormulaList getAuxiliaryCandidates(LabelledFormulaFactory lff, SignedFormulaFactory sff,
@@ -208,13 +238,18 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 		*/
 		
 		SignedFormulaList result = getReferences(proofTree, sfl);
+		System.out.println("DEBUG: References found: " + result);
 
 		if (result.size() > 0) {
 			SignedFormula auxCandidate = (SignedFormula) result.get(0);
+			System.out.println("DEBUG: Auxiliary candidate: " + auxCandidate);
 
 			hasApplied = applyTwoPremiseRule(proofTree, sfb, mainCandidate,
 					aRule, result, auxCandidate);
+			System.out.println("DEBUG: Two-premise rule applied: " + hasApplied);
 
+		} else {
+			System.out.println("DEBUG: No auxiliary references found for rule " + rule);
 		}
 
 		return hasApplied;
@@ -237,12 +272,15 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			TwoPremisesOneConclusionRule aRule, SignedFormulaList sfl,
 			SignedFormula auxCandidate) {
 		boolean hasApplied = false;
+		System.out.println("DEBUG: applyTwoPremiseRule - main: " + mainCandidate + ", aux: " + auxCandidate);
 		sfl.add(0, mainCandidate);
+		System.out.println("DEBUG: SignedFormulaList for rule: " + sfl);
 		SignedFormulaList conclusion = (aRule.getPossibleConclusions(sfb
 				.getSignedFormulaFactory(), sfb.getFormulaFactory(), sfl));
+		System.out.println("DEBUG: Possible conclusions: " + conclusion);
 
 		// TODO sup�e apenas uma conclus�o
-		if (conclusion!=null && proofTree.getNode(conclusion.get(0)) == null) {
+		if (conclusion!=null && conclusion.size() > 0 && proofTree.getNode(conclusion.get(0)) == null) {
 			proofTree.addLast(new SignedFormulaNode((SignedFormula) conclusion
 					.get(0), SignedFormulaNodeState.NOT_ANALYSED, strategy
 					.createOrigin(aRule, proofTree.getNode(mainCandidate),

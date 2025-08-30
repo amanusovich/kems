@@ -18,6 +18,10 @@ public class LabelledFormulaFactory  extends SignedFormulaFactory {
         _signedFormulas = new TreeMap<String, SignedFormula>();
     }
 
+	public LabelledFormula createLabelledFormula(SignedFormula aSignedFormula) {
+		return new LabelledFormula(aSignedFormula);
+	}
+
 	public LabelledFormula createLabelledFormula(FormulaLabel aFormulaLabel, SignedFormula aSignedFormula) {
 		return new LabelledFormula(aFormulaLabel, aSignedFormula);
 	}

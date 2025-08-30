@@ -4,11 +4,19 @@
  */
 package logic.signedFormulas;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import logic.formulas.FormulaFactory;
+import logic.labelledFormulas.ContextFormulaLabel;
+import logic.labelledFormulas.FormulaLabel;
+import logic.labelledFormulas.LabelledFormula;
 import logic.problem.Problem;
 import parsers.ParserUser;
-import ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer;
-import ConversorWagnerSATLIB.ConversorWagnerSATLIBParser;
+// import ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer;
+// import ConversorWagnerSATLIB.ConversorWagnerSATLIBParser;
+import logicalSystems.ipl.IPLSignedFormulaFactory;
+
 
 /**
  * Class that allows the creation of formulas from strings (using Wagner Dias's
@@ -19,12 +27,10 @@ public class SignedFormulaCreator {
 
 	/** conversor wagner lexer and parser class names * */
 	// "ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer";
-	private static final String CW_LEXER = ConversorWagnerSATLIBLexer.class
-			.getCanonicalName();
+	private static final String CW_LEXER = "ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer";
 
 	// "ConversorWagnerSATLIB.ConversorWagnerSATLIBParser";
-	private static final String CW_PARSER = ConversorWagnerSATLIBParser.class
-			.getCanonicalName();
+	private static final String CW_PARSER = "ConversorWagnerSATLIB.ConversorWagnerSATLIBParser";
 
 	private SignedFormulaFactory _sff;
 
@@ -42,7 +48,12 @@ public class SignedFormulaCreator {
 	 * @param packageName
 	 */
 	public SignedFormulaCreator(String packageName) {
-		_sff = new SignedFormulaFactory();
+		// Para IPL, usar IPLSignedFormulaFactory que maneja ContextFormulaLabel
+		if ("ipl".equals(packageName)) {
+			_sff = new IPLSignedFormulaFactory();
+		} else {
+			_sff = new SignedFormulaFactory();
+		}
 		_ff = new FormulaFactory();
 		_packageName = packageName;
 	}
@@ -74,7 +85,13 @@ public class SignedFormulaCreator {
 		_problem = (Problem) pu2.parseString(_packageName + "." + _packageName
 				+ "Lexer", _packageName + "." + _packageName + "Parser", s);
 
+		// Para IPL, necesitamos que el Problem use nuestra LabelledFormulaFactory
 		_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+		
+		// CRÍTICO: Reemplazar la factory del Problem con la nuestra (especialmente para IPL)
+		if ("ipl".equals(_packageName)) {
+			replaceFormulaFactory(_problem);
+		}
 
 		return _problem;
 	}
@@ -107,6 +124,11 @@ public class SignedFormulaCreator {
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", s);
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			
+			// CRÍTICO: Reemplazar la factory del Problem con la nuestra (especialmente para IPL)
+			if ("ipl".equals(_packageName)) {
+				replaceFormulaFactory(_problem);
+			}
 		} else {
 			ParserUser pu2 = new ParserUser();
 			_problem = (Problem) pu2.parseFile(_packageName + "."
@@ -114,6 +136,11 @@ public class SignedFormulaCreator {
 					+ "Parser", completeFilename);
 
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			
+			// CRÍTICO: Reemplazar la factory del Problem con la nuestra (especialmente para IPL)
+			if ("ipl".equals(_packageName)) {
+				replaceFormulaFactory(_problem);
+			}
 		}
 
 		_problem.setFilename(completeFilename);
@@ -129,6 +156,55 @@ public class SignedFormulaCreator {
 
 	public FormulaFactory getFormulaFactory() {
 		return _ff;
+	}
+	
+	/**
+	 * Reemplaza la SignedFormulaFactory del Problem con la nuestra.
+	 * Esto es crítico para IPL donde necesitamos LabelledFormulaFactory con Context compartido.
+	 */
+	private void replaceFormulaFactory(Problem problem) {
+		// Crear Context si no existe
+		if (!problem.hasIPLContext()) {
+			problem.setIPLContext(new logic.labelledFormulas.Context());
+			System.out.println("✅ IPL: Context creado para el Problem");
+		}
+		
+		// Crear IPLSignedFormulaFactory con el Context del Problem
+		IPLSignedFormulaFactory iplFactory = new IPLSignedFormulaFactory(problem.getIPLContext());
+		
+		// ✅ CRÍTICO: Convertir todas las fórmulas existentes a usar ContextFormulaLabel
+		List<SignedFormula> originalFormulas = new ArrayList<SignedFormula>(problem.getFormulas().getList());
+		SignedFormulaList formulasList = problem.getFormulas();
+		
+		// Limpiar y reconstruir la lista
+		while (formulasList.size() > 0) {
+			formulasList.remove(0); // Remover todas las fórmulas
+		}
+		
+		for (SignedFormula originalFormula : originalFormulas) {
+			FormulaLabel originalLabel = originalFormula.getLabel();
+			
+			// Crear ContextFormulaLabel equivalente
+			ContextFormulaLabel contextLabel = new ContextFormulaLabel(
+				problem.getIPLContext(), 
+				originalLabel.getIndex()
+			);
+			problem.getIPLContext().addElement(contextLabel);
+			
+			// Crear nueva LabelledFormula con ContextFormulaLabel
+			LabelledFormula newLabelledFormula = iplFactory.createLabelledFormula(
+				contextLabel,
+				originalFormula
+			);
+			
+			formulasList.add(newLabelledFormula);
+			System.out.println("🔄 Converted " + originalLabel + " (" + originalLabel.getClass().getSimpleName() + ") → " + contextLabel + " (ContextFormulaLabel)");
+		}
+		
+		problem.setSignedFormulaFactory(iplFactory);
+		_sff = iplFactory;
+
+		System.out.println("✅ IPL: " + originalFormulas.size() + " fórmulas convertidas a ContextFormulaLabel");
 	}
 
 }

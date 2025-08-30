@@ -42,9 +42,16 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
 	    SignedFormulaList lfl = new SignedFormulaList();
 	    lfl.add(main);
 	    lfl.add(auxiliary);
-	    boolean labelCondition = _labelCondition.matches(lfl); 
-        return labelCondition && auxiliary.getSignedFormula().getSign().equals(_auxiliarySign)
-                && recursivelyMatches(main.getSignedFormula().getFormula(), auxiliary);
+	    boolean labelCondition = _labelCondition.matches(lfl);
+	    boolean signCondition = auxiliary.getSignedFormula().getSign().equals(_auxiliarySign);
+	    boolean formulaCondition = recursivelyMatches(main.getSignedFormula().getFormula(), auxiliary);
+	    
+	    System.out.println("DEBUG: Pattern matching - main: " + main + ", aux: " + auxiliary);
+	    System.out.println("DEBUG: Label condition: " + labelCondition + " (expected: " + _auxiliarySign + ", actual: " + auxiliary.getSignedFormula().getSign() + ")");
+	    System.out.println("DEBUG: Sign condition: " + signCondition);
+	    System.out.println("DEBUG: Formula condition: " + formulaCondition);
+	    
+        return labelCondition && signCondition && formulaCondition;
 	}
 
 	private boolean recursivelyMatches(Formula main, LabelledFormula auxiliary) {

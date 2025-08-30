@@ -55,6 +55,7 @@ public class IPLRuleStructures {
         /** one premise rules */
         onePremiseRules = initializeOnePremiseRuleList();
         /** one premise simplification rules */
+        topAndBottomRulesNew = new TopBottomRoleRuleList(); // Inicializar vacía por ahora
         //topAndBottomRulesNew = initializeTBRuleList();
         /** Two premise substitution rules */
         twoPremiseRules = initializeTwoPremiseRuleList();
@@ -115,7 +116,11 @@ public class IPLRuleStructures {
     private IPLConnectiveRoleSignRuleList initializeTwoPremiseRuleList() {
         twoPremiseRules = new IPLConnectiveRoleSignRuleList();
 
+        System.out.println("DEBUG: Initializing two-premise rules...");
+        System.out.println("DEBUG: Signature contains OR: " + signature.contains(IPLConnectives.OR));
+
         // Regla 3
+        System.out.println("DEBUG: Adding X_OR_F_LEFT rule...");
         addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
                 IPLSigns.TRUE, IPLRules.X_OR_F_LEFT);
         // Regla 4
@@ -202,9 +207,14 @@ public class IPLRuleStructures {
 
     protected void addToTwoPremiseRules(Connective conn, KERuleRole role,
             FormulaSign sign, TwoPremisesOneConclusionRule r) {
+        System.out.println("DEBUG: addToTwoPremiseRules called with: " + conn + ", " + role + ", " + sign + ", " + r);
         if (signature.contains(conn)) {
+            System.out.println("DEBUG: Signature contains connective, adding rule...");
             addConnectiveRuleType(conn, r, RuleType.SUBSTITUTION_2P);
             twoPremiseRules.add(conn, role, sign, r);
+            System.out.println("DEBUG: Rule added. TwoPremiseRules size: " + twoPremiseRules.size());
+        } else {
+            System.out.println("DEBUG: Signature does NOT contain connective: " + conn);
         }
     }
 

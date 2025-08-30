@@ -7,7 +7,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -35,6 +34,10 @@ public class Context {
     public void addElement(FormulaLabel element) {
         greaterThanMap.putIfAbsent(element, new HashSet<>());
         lessThanMap.putIfAbsent(element, new HashSet<>());
+        
+        if (!labels.contains(element)) {
+            labels.addLast(element);
+        }
     }
 
     // Define a relation: a < b
@@ -42,8 +45,37 @@ public class Context {
         addElement(a);
         addElement(b);
 
-        greaterThanMap.get(a).add(b);
-        lessThanMap.get(b).add(a);
+        // a < b means b is greater than a, and a is less than b
+        greaterThanMap.get(b).add(a);  // b > a
+        lessThanMap.get(a).add(b);     // a < b
+        
+        // Add transitive closure
+        addTransitiveClosure(a, b);
+    }
+
+    // Add transitive closure to maintain transitivity property
+    private void addTransitiveClosure(FormulaLabel a, FormulaLabel b) {
+        // We've added a < b, now ensure transitivity
+        
+        // For all elements c such that c < a, now c < b (transitivity: c < a < b => c < b)
+        if (greaterThanMap.get(a) != null) {
+            for (FormulaLabel c : new HashSet<>(greaterThanMap.get(a))) {  // c < a
+                if (!lessThanMap.get(c).contains(b)) {
+                    lessThanMap.get(c).add(b);      // c < b
+                    greaterThanMap.get(b).add(c);   // b > c
+                }
+            }
+        }
+        
+        // For all elements d such that b < d, now a < d (transitivity: a < b < d => a < d)
+        if (lessThanMap.get(b) != null) {
+            for (FormulaLabel d : new HashSet<>(lessThanMap.get(b))) {  // b < d
+                if (!lessThanMap.get(a).contains(d)) {
+                    lessThanMap.get(a).add(d);      // a < d
+                    greaterThanMap.get(d).add(a);   // d > a
+                }
+            }
+        }
     }
 
     // Compare two elements in the partial order
@@ -59,25 +91,33 @@ public class Context {
 
     // Check if a < b
     public boolean isLowerThan(FormulaLabel a, FormulaLabel b) {
-        return greaterThanMap.get(a).contains(b);
+        Set<FormulaLabel> aLessThan = lessThanMap.get(a);
+        return aLessThan != null && aLessThan.contains(b);
     }
 
     // Check if a > b
     public boolean isGreaterThan(FormulaLabel a, FormulaLabel b) {
-        return lessThanMap.get(a).contains(b);
+        Set<FormulaLabel> aGreaterThan = greaterThanMap.get(a);
+        return aGreaterThan != null && aGreaterThan.contains(b);
     }
 
     // Check if a == b (i.e., a and b are comparable and equal)
     public boolean isEqual(FormulaLabel a, FormulaLabel b) {
-        
         if (a == b) {
-            return true; // Same object reference
+            return true; // Same object reference (reflexivity)
         }
-        if (greaterThanMap.get(a).contains(b) || lessThanMap.get(a).contains(b)) {
-            return false; // They are comparable but not equal
+        if (a != null && b != null && a.equals(b)) {
+            return true; // Logical equality (reflexivity)
         }
-        return false; // They are incomparable, thus not equal 
-
+        if (lessThanMap.get(a) != null && lessThanMap.get(a).contains(b)) {
+            return false; // a < b, they are not equal
+        }
+        if (greaterThanMap.get(a) != null && greaterThanMap.get(a).contains(b)) {
+            return false; // a > b, they are not equal
+        }
+        // If they are not related by < or >, they could be equal or incomparable
+        // For partial orders, if elements are not related, we consider them incomparable and not equal
+        return false;
     }
 
     /**
@@ -132,16 +172,6 @@ public class Context {
     public FormulaLabel getNewFormulaLabel() {
         FormulaLabel newLabel;
         newLabel = new ContextFormulaLabel(this, this.labels.size());
-        /*
-        if (this.labels.isEmpty()) {
-            newLabel = new ContextFormulaLabel(this, this.labels.size());
-
-        } else {
-            newLabel = this.labels.getLast().getNextFormulaLabel();
-        }
-        */
-        this.labels.addLast(newLabel);
-
         addElement(newLabel);
         return newLabel;
     }
@@ -182,6 +212,14 @@ public class Context {
         FormulaLabel newFormulaLabel = getNewFormulaLabel();
         setAsLowerThan(label, newFormulaLabel);
         return newFormulaLabel;
+	}
+	
+	/**
+	 * Returns a read-only view of all labels in this context.
+	 * Used by MinimalGreaterLabelGetter to find minimal existing labels.
+	 */
+	public List<FormulaLabel> getLabels() {
+		return new ArrayList<>(labels);
 	}
 
 }
