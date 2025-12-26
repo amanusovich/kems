@@ -4,13 +4,7 @@
  */
 package logic.signedFormulas;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import logic.formulas.FormulaFactory;
-import logic.labelledFormulas.ContextFormulaLabel;
-import logic.labelledFormulas.FormulaLabel;
-import logic.labelledFormulas.LabelledFormula;
 import logic.problem.Problem;
 import parsers.ParserUser;
 // import ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer;
@@ -82,15 +76,19 @@ public class SignedFormulaCreator {
 		}
 
 		ParserUser pu2 = new ParserUser();
-		_problem = (Problem) pu2.parseString(_packageName + "." + _packageName
-				+ "Lexer", _packageName + "." + _packageName + "Parser", s);
+		_problem = (Problem) pu2.parseString(
+			_packageName + "." + _packageName + "Lexer",
+			_packageName + "." + _packageName + "Parser",
+			s
+		);
 
-		// Para IPL, necesitamos que el Problem use nuestra LabelledFormulaFactory
+		// Clonar fórmulas desde la factory del parser a nuestra factory
+		// Para IPL: IPLSignedFormulaFactory.cloneAll() convierte automáticamente a ContextFormulaLabel
+		// Para otras lógicas: SignedFormulaFactory.cloneAll() copia normalmente
 		_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
 		
-		// CRÍTICO: Reemplazar la factory del Problem con la nuestra (especialmente para IPL)
 		if ("ipl".equals(_packageName)) {
-			replaceFormulaFactory(_problem);
+			cloneIPLContext();
 		}
 
 		return _problem;
@@ -123,11 +121,14 @@ public class SignedFormulaCreator {
 			_problem = (Problem) pu2.parseString(_packageName + "."
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", s);
+			
+			// Clonar fórmulas desde la factory del parser a nuestra factory
+			// Para IPL: IPLSignedFormulaFactory.cloneAll() convierte automáticamente a ContextFormulaLabel
+			// Para otras lógicas: SignedFormulaFactory.cloneAll() copia normalmente
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
 			
-			// CRÍTICO: Reemplazar la factory del Problem con la nuestra (especialmente para IPL)
 			if ("ipl".equals(_packageName)) {
-				replaceFormulaFactory(_problem);
+				cloneIPLContext();
 			}
 		} else {
 			ParserUser pu2 = new ParserUser();
@@ -135,11 +136,13 @@ public class SignedFormulaCreator {
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", completeFilename);
 
+			// Clonar fórmulas desde la factory del parser a nuestra factory
+			// Para IPL: IPLSignedFormulaFactory.cloneAll() convierte automáticamente a ContextFormulaLabel
+			// Para otras lógicas: SignedFormulaFactory.cloneAll() copia normalmente
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
 			
-			// CRÍTICO: Reemplazar la factory del Problem con la nuestra (especialmente para IPL)
 			if ("ipl".equals(_packageName)) {
-				replaceFormulaFactory(_problem);
+				cloneIPLContext();
 			}
 		}
 
@@ -157,54 +160,15 @@ public class SignedFormulaCreator {
 	public FormulaFactory getFormulaFactory() {
 		return _ff;
 	}
-	
-	/**
-	 * Reemplaza la SignedFormulaFactory del Problem con la nuestra.
-	 * Esto es crítico para IPL donde necesitamos LabelledFormulaFactory con Context compartido.
-	 */
-	private void replaceFormulaFactory(Problem problem) {
-		// Crear Context si no existe
-		if (!problem.hasIPLContext()) {
-			problem.setIPLContext(new logic.labelledFormulas.Context());
-			System.out.println("✅ IPL: Context creado para el Problem");
-		}
-		
-		// Crear IPLSignedFormulaFactory con el Context del Problem
-		IPLSignedFormulaFactory iplFactory = new IPLSignedFormulaFactory(problem.getIPLContext());
-		
-		// ✅ CRÍTICO: Convertir todas las fórmulas existentes a usar ContextFormulaLabel
-		List<SignedFormula> originalFormulas = new ArrayList<SignedFormula>(problem.getFormulas().getList());
-		SignedFormulaList formulasList = problem.getFormulas();
-		
-		// Limpiar y reconstruir la lista
-		while (formulasList.size() > 0) {
-			formulasList.remove(0); // Remover todas las fórmulas
-		}
-		
-		for (SignedFormula originalFormula : originalFormulas) {
-			FormulaLabel originalLabel = originalFormula.getLabel();
-			
-			// Crear ContextFormulaLabel equivalente
-			ContextFormulaLabel contextLabel = new ContextFormulaLabel(
-				problem.getIPLContext(), 
-				originalLabel.getIndex()
-			);
-			problem.getIPLContext().addElement(contextLabel);
-			
-			// Crear nueva LabelledFormula con ContextFormulaLabel
-			LabelledFormula newLabelledFormula = iplFactory.createLabelledFormula(
-				contextLabel,
-				originalFormula
-			);
-			
-			formulasList.add(newLabelledFormula);
-			System.out.println("🔄 Converted " + originalLabel + " (" + originalLabel.getClass().getSimpleName() + ") → " + contextLabel + " (ContextFormulaLabel)");
-		}
-		
-		problem.setSignedFormulaFactory(iplFactory);
-		_sff = iplFactory;
 
-		System.out.println("✅ IPL: " + originalFormulas.size() + " fórmulas convertidas a ContextFormulaLabel");
+	private void cloneIPLContext() {
+		// Sincronizar el Context del Problem con el de la factory
+		if (_sff instanceof IPLSignedFormulaFactory) {
+			IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) _sff;
+			_problem.setIPLContext(iplFactory.getContext());
+			_problem.setSignedFormulaFactory(iplFactory);
+			// System.out.println("✅ IPL: Factory y Context sincronizados entre Problem y SignedFormulaCreator");
+		}
 	}
-
+	
 }

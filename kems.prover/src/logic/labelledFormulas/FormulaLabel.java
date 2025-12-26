@@ -80,7 +80,7 @@ public class FormulaLabel implements Comparable<FormulaLabel>{
 
 	public boolean lowerOrEqualThan(FormulaLabel aux) {
 		boolean result = this.index <= aux.getIndex();
-		System.out.println("DEBUG: FormulaLabel.lowerOrEqualThan - this: " + this + " (index=" + this.index + "), aux: " + aux + " (index=" + aux.getIndex() + "), result: " + result);
+		// System.out.println("DEBUG: FormulaLabel.lowerOrEqualThan - this: " + this + " (index=" + this.index + "), aux: " + aux + " (index=" + aux.getIndex() + "), result: " + result);
 		return result;
 	}
 	public boolean lowerThan(FormulaLabel aux) {

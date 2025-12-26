@@ -359,11 +359,11 @@ public class ProverFacade {
 				.setComparator(proverConfiguration.getSignedFormulaComparator());
 
 		// Para IPL, pasar el Context del Problem a la Strategy
-		if (strategy instanceof main.newstrategy.ipl.IPLSimpleStrategy && 
-			problem != null && problem.hasIPLContext()) {
-			((main.newstrategy.ipl.IPLSimpleStrategy) strategy).setIPLContext(problem.getIPLContext());
-			System.out.println("✅ IPL: Context del Problem inyectado en Strategy");
-		}
+		// if (strategy instanceof main.newstrategy.ipl.IPLSimpleStrategy && 
+		// 	problem != null && problem.hasIPLContext()) {
+		// 	((main.newstrategy.ipl.IPLSimpleStrategy) strategy).setIPLContext(problem.getIPLContext());
+		// 	System.out.println("✅ IPL: Context del Problem inyectado en Strategy");
+		// }
 
 		// if (strategy instanceof ConfigurableSimpleStrategy) {
 		// ((ConfigurableSimpleStrategy) strategy)

@@ -56,9 +56,8 @@ public class RuleStructureFactory {
                     ClassicalSignatureFactory.getInstance().getNormalBXSignature())
                     .getRuleStructure();
         } else if (rulesStructureName.equals(IPL)) {
-            rulesStructure = new IPLRuleStructures(IPLSignatureFactory.getInstance()
-            		.getNormalSignature()).getRuleStructure();
-            		//.getClausalSignature()).getRuleStructure();
+            rulesStructure = new IPLRuleStructures(IPLSignatureFactory.getInstance().getNormalSignature())
+                                    .getRuleStructure();
         } else {
             throw new KEMSException("No rules structure configured for " + rulesStructureName
                     + " !");

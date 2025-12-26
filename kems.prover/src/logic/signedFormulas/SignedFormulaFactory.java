@@ -25,7 +25,7 @@ public class SignedFormulaFactory {
 
     Map<String, SignedFormula> _signedFormulas;
 
-    SignedFormula _lastSignedFormulaAdded = null;
+    protected SignedFormula _lastSignedFormulaAdded = null;
 
     public SignedFormulaFactory() {
         _signedFormulas = new TreeMap<String, SignedFormula>();

@@ -8,22 +8,16 @@ import rules.ActionType;
 import rules.KERuleRole;
 import rules.NamedRule;
 import rules.getters.BinaryTwoPremisesConnectiveGetter;
-import rules.getters.SubformulaRoleGetter;
 import rules.getters.UnaryConnectiveGetter;
-import rules.ipl.CompositeLabelledAction;
-import rules.ipl.KEDecoratedRuleRole;
 import rules.ipl.KELabelledAction;
 import rules.ipl.SimpleSubformulaRoleGetter;
-import rules.ipl.labels.BinarySomeRelationLabelCondition;
 import rules.ipl.labels.GreaterBinaryRelationLabelCondition;
 import rules.ipl.labels.GreaterThanLabelCondition;
 import rules.ipl.labels.LessThanLabelCondition;
 import rules.ipl.labels.LabelGetter;
 import rules.ipl.labels.MinimalGreaterLabelGetter;
-import rules.ipl.labels.MainLabelGetter;
+import rules.ipl.labels.NewLabelGetter;
 import rules.ipl.labels.NoLabelCondition;
-import rules.patterns.ipl.TwoLevelCompositeBinaryFormulaPattern;
-import rules.patterns.ipl.TwoLevelCompositeFormulaPattern;
 
 /**
  * Rules (and patterns for these rules) for IPL.
@@ -36,8 +30,8 @@ public class IPLRules {
 	/** Rule for closing branches */
 	public static final NamedRule CLOSE = new NamedRule("CLOSE");
 
-	/**
-	Rule 1
+	/**}
+	Rule (F∨) - F-Disyunción
 	F A∨B : ci
 	---------
 	F A: ci
@@ -50,7 +44,7 @@ public class IPLRules {
 			new KELabelledAction(ActionType.ADD_NODE, rules.ipl.BinaryConnectiveGetter.FALSE_RIGHT, LabelGetter.MAIN));
 
 	/**
-	Rule 2
+	Rule (T∧) - T-Conjunción
 	T A∧B : ci
 	---------
 	T A: ci
@@ -64,242 +58,34 @@ public class IPLRules {
 		new rules.ipl.KELabelledAction(
 				ActionType.ADD_NODE, rules.ipl.BinaryConnectiveGetter.TRUE_RIGHT, LabelGetter.MAIN));
 
-
-	/**
-	Rule 3
-	T A∨B : ci
-	F A: cj
-	ci ⪯ cj
-	----------
-	T B : ci
-	*/
-	static final rules.patterns.ipl.SignConnectiveRoleSubformulaPattern pattern_X_OR_F_LEFT = new rules.patterns.ipl.SignConnectiveRoleSubformulaPattern(
-		IPLConnectives.OR, 	// connective that may appear in any subformula of the main formula.
-		IPLSigns.FALSE, 	// sign of the auxiliary formula.
-		KERuleRole.LEFT,
-        new LessThanLabelCondition());	// ci ⪯ cj: main.label ≤ aux.label 
-							// where the _mainConnective was found.
-
-	public static final rules.ipl.TwoPremisesOneConclusionRule X_OR_F_LEFT = new rules.ipl.TwoPremisesOneConclusionRule(
-			"X_OR_F_LEFT", 
-			pattern_X_OR_F_LEFT,
-			new KELabelledAction(
-				ActionType.ADD_NODE,
-				new SubformulaRoleGetter(pattern_X_OR_F_LEFT, KERuleRole.RIGHT),
-				LabelGetter.MAIN
-			));
-
-	/**
-    Rule 4
-    T A∨B : ci
-    F B: cj
-    ci ⪯ cj
-    ---------
-    T A : ci
-     */
-	static final rules.patterns.ipl.SignConnectiveRoleSubformulaPattern pattern_X_OR_F_RIGHT = new rules.patterns.ipl.SignConnectiveRoleSubformulaPattern(
-			IPLConnectives.OR, 
-			IPLSigns.FALSE, 
-			KERuleRole.RIGHT,
-			new LessThanLabelCondition());	// ci ⪯ cj: main.label ≤ aux.label
-
-	public static final rules.ipl.TwoPremisesOneConclusionRule T_OR_F_RIGHT = new rules.ipl.TwoPremisesOneConclusionRule(
-			"X_OR_F_RIGHT", pattern_X_OR_F_RIGHT,
-			new KELabelledAction(
-				ActionType.ADD_NODE,
-				new rules.ipl.SubformulaRoleGetter(pattern_X_OR_F_RIGHT, KERuleRole.LEFT),
-				LabelGetter.MAIN
-			));
-
-	/**
-    Rule 5
-	T not(A or B): Ci
-	-----------------
-	T not A : Ci
-	T not B : Ci
-	*/
-	public static final rules.ipl.OnePremiseTwoConclusionsRule T_NOT_A_OR_B = new rules.ipl.OnePremiseTwoConclusionsRule(
-		"T_NOT_A_OR_B",
-		new rules.patterns.ipl.TwoLevelCompositeFormulaPattern(IPLConnectives.NOT, IPLConnectives.OR),
-		new KELabelledAction(
-			ActionType.ADD_NODE,
-			//new NotSubformulaGetter(KERuleRole.LEFT, IPLSigns.TRUE),
-			new CompositeLabelledAction(IPLConnectives.NOT, new NotSubformulaGetter(KERuleRole.LEFT, IPLSigns.TRUE)),
-			LabelGetter.MAIN
-		),
-		new KELabelledAction(
-			ActionType.ADD_NODE,
-			new CompositeLabelledAction(IPLConnectives.NOT, new NotSubformulaGetter(KERuleRole.RIGHT, IPLSigns.TRUE)),
-			//new NotSubformulaGetter(KERuleRole.RIGHT, IPLSigns.TRUE),
-			LabelGetter.MAIN
-		)
-	);
-	
-	/**
-	Rule 6
-	T A or B: Ci
-	T not A : Cj
-	Ci <= Cj or Cj <= Ci
-	-----------------
-	T B : Ci
-	*/
-	static final rules.patterns.ipl.SignConnectiveRoleSubformulaPattern pattern_T_A_OR_B = new rules.patterns.ipl.SignConnectiveRoleSubformulaPattern(
-			IPLConnectives.OR, 	// connective that may appear in any subformula of the main formula.
-			IPLSigns.TRUE, 	// sign of the auxiliary formula.
-			new KEDecoratedRuleRole("Left", IPLConnectives.NOT),   // role of the auxiliary formula in the subformula of the main formula 
-			                                                       // where the _mainConnective was found.
-			new BinarySomeRelationLabelCondition());	
-								
-
-	public static final rules.ipl.TwoPremisesOneConclusionRule T_A_OR_B = new rules.ipl.TwoPremisesOneConclusionRule(
-		"T_A_OR_B",
-		pattern_T_A_OR_B,
-		new KELabelledAction(
-			ActionType.ADD_NODE,
-			new rules.ipl.SubformulaRoleGetter(pattern_T_A_OR_B, KERuleRole.RIGHT),
-			LabelGetter.MAIN
-		)
-	);
-	
     /**
-     * Regla 7
-     * T A or B : ci
-     * T not B: cj
-     * ci <= cj or cj <= ci
-     * --------------------
-     * T A: ci
-     */
-    static final rules.patterns.ipl.SignConnectiveRoleSubformulaPattern pattern_T_A_OR_B_NOT_B = new rules.patterns.ipl.SignConnectiveRoleSubformulaPattern(
-            IPLConnectives.OR,  // connective that may appear in any subformula of the main formula.
-            IPLSigns.TRUE,  // sign of the auxiliary formula.
-            new KEDecoratedRuleRole("Right", IPLConnectives.NOT),   // role of the auxiliary formula in the subformula of the main formula 
-                                                                   // where the _mainConnective was found.
-            new BinarySomeRelationLabelCondition());    
-                    
-	
-	public static final rules.ipl.TwoPremisesOneConclusionRule T_A_OR_B_NOT_B = new rules.ipl.TwoPremisesOneConclusionRule(
-            "T_A_OR_B_NOT_B",
-            pattern_T_A_OR_B_NOT_B,
-            new KELabelledAction(
-                ActionType.ADD_NODE,
-                new rules.ipl.SubformulaRoleGetter(pattern_T_A_OR_B_NOT_B, KERuleRole.LEFT),
-                //new NotSubformulaGetter(KERuleRole.RIGHT, IPLSigns.TRUE),
-                LabelGetter.MAIN
-            )
-        );	
-	
-	/**
-    Rule 8
-    F A and B : cj
-    T A : ci
+    Regla (F ∧1):
+    F A∧B : cj
+    T B : ci
     ci ⪯ cj
     ----------
-    F B : cj
-    */    
-	
-	public static final rules.ipl.TwoPremisesOneConclusionRule F_AND_LEFT = new rules.ipl.TwoPremisesOneConclusionRule(
-            "F_AND_LEFT",
-
+    F A : cj
+    
+    Se usa con PB: si no existe T B, PB lo genera y luego aplica esta regla
+    */
+    public static final rules.ipl.TwoPremisesOneConclusionRule F_AND_RIGHT = new rules.ipl.TwoPremisesOneConclusionRule(
+            "F_AND_RIGHT",
             new rules.patterns.ipl.TwoSignsConnectiveRolePattern(
                     IPLSigns.FALSE,     // main sign
                     IPLConnectives.AND, // main connective
                     IPLSigns.TRUE,      // aux sign
-                    KERuleRole.LEFT,    // aux role
-					// cambiar por GreaterEqual y ver otros
-                    new GreaterThanLabelCondition()
+                    KERuleRole.RIGHT,   // aux role (T B es la subfórmula derecha)
+                    new GreaterThanLabelCondition() // ci ⪯ cj
             ),   
             new KELabelledAction(
                     ActionType.ADD_NODE,
-                    BinaryTwoPremisesConnectiveGetter.FALSE_OTHER,
-                    LabelGetter.MAIN
+                    BinaryTwoPremisesConnectiveGetter.FALSE_OTHER, // F A (la otra subfórmula)
+                    LabelGetter.MAIN // usa etiqueta de la premisa mayor (cj)
             ));
 
     /**
-    Rule 9
-    F A and B: Cj
-    T B : Ci
-    Ci <= Cj
-    -----------------
-    F A : Cj
-    */
-	static final rules.patterns.ipl.SignConnectiveRoleSubformulaPattern pattern_X_AND_T_RIGHT = new rules.patterns.ipl.SignConnectiveRoleSubformulaPattern(
-            IPLConnectives.AND, 
-            IPLSigns.TRUE, 
-            KERuleRole.RIGHT, 
-            new GreaterThanLabelCondition());
-
-    public static final rules.ipl.TwoPremisesOneConclusionRule X_AND_T_RIGHT = new rules.ipl.TwoPremisesOneConclusionRule(
-        "X_AND_T_RIGHT",
-        pattern_X_AND_T_RIGHT,
-        new KELabelledAction(
-            ActionType.ADD_NODE,
-            new SubformulaRoleGetter(pattern_X_AND_T_RIGHT, KERuleRole.LEFT),
-            LabelGetter.MAIN
-        )
-    );	
-	
-    /**
-    Rule 10
-    T not (A and B) : ci
-    T A : cj
-    ci <= ck and cj <= cK
-    -----------------
-    T not B : cK
-    */
-    public static final TwoLevelCompositeBinaryFormulaPattern T_NOT_AND_B_PATTERN = new TwoLevelCompositeBinaryFormulaPattern(
-        IPLConnectives.NOT, 
-        IPLConnectives.AND, 
-        IPLSigns.TRUE,
-        IPLSigns.TRUE, 
-        //new KEDecoratedRuleRole("Right", IPLConnectives.NOT), 
-        KERuleRole.LEFT,
-        new GreaterBinaryRelationLabelCondition()
-        );
-
-    public static final rules.ipl.TwoPremisesOneConclusionRule T_NOT_A_AND_B = new rules.ipl.TwoPremisesOneConclusionRule(
-        "T_NOT_A_AND_B",
-        T_NOT_AND_B_PATTERN,
-
-        new KELabelledAction(
-            ActionType.ADD_NODE,
-            
-            new rules.ipl.SubformulaRoleGetter(T_NOT_AND_B_PATTERN, new KEDecoratedRuleRole("Right", IPLConnectives.NOT) ),
-            //new rules.ipl.SubformulaRoleGetter(T_NOT_AND_B_PATTERN, KERuleRole.RIGHT ),
-            new MinimalGreaterLabelGetter()
-        )
-    );
-    
-    
-    /**
-    Rule 11
-    T not (A and B) : ci
-    T B : cj
-    ci ⪯ ck and cj ⪯ ck
-    -----------------
-    T not A : ck
-    */
-    public static final TwoLevelCompositeBinaryFormulaPattern pattern_T_NOT_AND_LEFT = new TwoLevelCompositeBinaryFormulaPattern(
-            IPLConnectives.NOT, 
-            IPLConnectives.AND, 
-            IPLSigns.TRUE,
-            IPLSigns.TRUE, 
-            KERuleRole.RIGHT,
-            //new KEDecoratedRuleRole("Right", IPLConnectives.NOT), 
-            new GreaterBinaryRelationLabelCondition());
-    
-    public static final  rules.ipl.TwoPremisesOneConclusionRule T_NOT_AND_LEFT = new  rules.ipl.TwoPremisesOneConclusionRule(
-        "T_NOT_AND_LEFT",
-        pattern_T_NOT_AND_LEFT,
-        new KELabelledAction(
-            ActionType.ADD_NODE,
-            new rules.ipl.SubformulaRoleGetter(pattern_T_NOT_AND_LEFT, new KEDecoratedRuleRole("Left", IPLConnectives.NOT) ),
-            new MinimalGreaterLabelGetter()
-        )
-    );
-            
-    /**
-    Rule 12
-    T A imples B : ci
+    Rule (T→₁) - T-Implicación (Modus Ponens)
+    T A→B : ci
     T A : cj
     ci ⪯ ck and cj ⪯ ck
     -----------------
@@ -327,8 +113,8 @@ public class IPLRules {
 
 
     /**
-    Rule 13
-    T A imples B : ci
+    Rule (T→₂) - T-Implicación (Modus Tollens)
+    T A→B : ci
     F B : cj
     ci ⪯ cj
     -----------------
@@ -351,8 +137,34 @@ public class IPLRules {
     );
 
     /**
-    Rule 14
-    F A imples B: ci
+    Rule (F→₃) - F-Implicación con T A existente
+    F A→B : cj
+    T A : ci
+    ci ⪯ cj
+    -----------------
+    F B : cj
+    
+    Esta regla permite usar una T A : ci existente (con ci ⪯ cj) 
+    para derivar F B : cj sin crear una nueva etiqueta.
+    */
+    public static final rules.ipl.TwoPremisesOneConclusionRule F_IMPLIES_T_LEFT = new rules.ipl.TwoPremisesOneConclusionRule(
+        "F_IMPLIES_T_LEFT",
+        new rules.patterns.ipl.TwoSignsConnectiveRolePattern(
+            IPLSigns.FALSE,     // main sign (F A→B : cj)
+            IPLConnectives.IMPLIES, // main connective
+            IPLSigns.TRUE,      // aux sign (T A : ci)
+            KERuleRole.LEFT,    // aux role (A es la subfórmula izquierda)
+            new GreaterThanLabelCondition() // ci ⪯ cj, es decir aux ≤ main
+        ),
+        new KELabelledAction(
+            ActionType.ADD_NODE,
+            BinaryTwoPremisesConnectiveGetter.FALSE_OTHER, // F B (la otra subfórmula)
+            LabelGetter.MAIN // usa etiqueta de la premisa mayor (cj)
+        ));
+
+    /**
+    Rule (F→) - F-Implicación
+    F A→B: ci
     ----------------- cj new
     T A : cj
     F B: cj
@@ -365,70 +177,43 @@ public class IPLRules {
 	        new KELabelledAction(
 	            ActionType.ADD_NODE,
 	            new SimpleSubformulaRoleGetter(KERuleRole.LEFT, IPLSigns.TRUE),
-	            LabelGetter.GLOBAL_NEW
-	        ),
-	        new KELabelledAction(
+	            LabelGetter.NEW  // ✅ CAMBIO: Usar NEW en lugar de GLOBAL_NEW
+	        ),                     // NEW crea una etiqueta mayor que ci (la premisa)
+	        new KELabelledAction( // sin establecer relaciones con todas las etiquetas del contexto
 	            ActionType.ADD_NODE,
 	            new SimpleSubformulaRoleGetter(KERuleRole.RIGHT, IPLSigns.FALSE),
-	            LabelGetter.GLOBAL_NEW
+	            LabelGetter.NEW
 	        ),
-	        LabelGetter.GLOBAL_NEW
+	        LabelGetter.NEW  // ✅ CAMBIO: Usar NEW para que ambas conclusiones tengan la misma etiqueta nueva
     );
-    
 
-    /**
-    Rule 15
-    T not (A implies B) : ci
-    ----------------- ck new
-    T A: ck
-    T not B : ci
-    ci ⪯ ck
-    */
-    public static final rules.ipl.OnePremiseTwoConclusionsRule T_NOT_A_IMPLIES_B_TA_FB = new rules.ipl.OnePremiseTwoConclusionsRule(
-            "T_NOT_A_IMPLIES_B_TA_FB",
-            //new rules.patterns.ipl.SignConnectivePattern(IPLSigns.FALSE, IPLConnectives.IMPLIES),
-            new TwoLevelCompositeFormulaPattern(IPLConnectives.NOT, IPLConnectives.IMPLIES),
-            new KELabelledAction(
-                ActionType.ADD_NODE,
-                new CompositeLabelledAction(IPLConnectives.NOT, new SimpleSubformulaRoleGetter(KERuleRole.LEFT, IPLSigns.TRUE)),
-                LabelGetter.GLOBAL_NEW
-            ),
-            new KELabelledAction(
-                ActionType.ADD_NODE,
-                new CompositeLabelledAction(IPLConnectives.NOT, new NotSubformulaGetter(KERuleRole.RIGHT, IPLSigns.TRUE)),
-                new MainLabelGetter()
-            )
-        );
+	/**
+	 Rule (T¬) - T-Negación
+	 T ¬A : ci
+	 ci ⪯ cj
+	 -----------------
+	 F A : cj
+	 Para cualquier cj tal que ci ≤ cj
+	 */
+	public static final rules.Rule T_NOT = new rules.ipl.OnePremiseOneConclusionRule(
+		"T_NOT",
+		new rules.patterns.ipl.SignConnectivePattern(
+				IPLSigns.TRUE, 
+				IPLConnectives.NOT), 
+		new KELabelledAction(
+				ActionType.ADD_NODE, 
+				UnaryConnectiveGetter.FALSE,
+				// cj tal que ci ⪯ cj (no necesariamente nuevo)
+				new MinimalGreaterLabelGetter()));
 
-    /**
-    Rule 16
-    T (A implies B) : ci
-    T not B : cj
-    ci ⪯ cj
-    ----------------- 
-    T not A : cj
-    */
-    static final rules.patterns.ipl.SignConnectiveRoleSubformulaPattern pattern_T_X_IMPLIES_Y_NOT_Y = new rules.patterns.ipl.SignConnectiveRoleSubformulaPattern(
-        IPLConnectives.IMPLIES, 
-        IPLSigns.TRUE, 
-        new KEDecoratedRuleRole("Right", IPLConnectives.NOT),
-        new LessThanLabelCondition());
-    public static final rules.ipl.TwoPremisesOneConclusionRule T_X_IMPLIES_Y_NOT_Y = new rules.ipl.TwoPremisesOneConclusionRule(
-        "T_X_IMPLIES_Y_NOT_Y", 
-        pattern_T_X_IMPLIES_Y_NOT_Y,
-        new KELabelledAction(
-            ActionType.ADD_NODE, 
-            new NotSubformulaGetter(KERuleRole.LEFT, IPLSigns.TRUE),
-            LabelGetter.AUX
-        )
-    );
     
     /**
-    Rule 17
-    F not A : ci
+    Rule (F¬) - F-Negación
+    F ¬A : ci
     ----------------- cj new
     T A : cj
     ci ⪯ cj
+    Condición: cj debe ser una constante nueva
     */
 	public static final rules.Rule F_NOT = new rules.ipl.OnePremiseOneConclusionRule(
 		"F_NOT",
@@ -438,24 +223,75 @@ public class IPLRules {
 		new KELabelledAction(
 				ActionType.ADD_NODE, 
 				UnaryConnectiveGetter.TRUE,
-				LabelGetter.GLOBAL_NEW));
+				// cj nuevo tal que ci ⪯ cj
+				new NewLabelGetter("MAIN")));
 
+	/**
+	Regla (T∨₁) - T-Disyunción 1
+	T A∨B : ci
+	F A : cj
+	ci ⪯ cj
+	----------
+	T B : ci
+	*/
+	public static final rules.ipl.TwoPremisesOneConclusionRule T_OR_F_LEFT = new rules.ipl.TwoPremisesOneConclusionRule(
+		"T_OR_F_LEFT",
+		new rules.patterns.ipl.TwoSignsConnectiveRolePattern(
+			IPLSigns.TRUE,     // main sign (T A∨B : ci)
+			IPLConnectives.OR, // main connective
+			IPLSigns.FALSE,    // aux sign (F A : cj)
+			KERuleRole.LEFT,   // aux role (A es la subfórmula izquierda)
+			new LessThanLabelCondition() // ci ⪯ cj (main ≤ aux)
+		),
+		new KELabelledAction(
+			ActionType.ADD_NODE,
+			BinaryTwoPremisesConnectiveGetter.TRUE_OTHER, // T B (la otra subfórmula)
+			LabelGetter.MAIN // usa etiqueta de la premisa mayor (ci)
+		));
 
-    /**
-    Rule 18
-    T not not A : ci
-    ----------------- ck new
-    T  A : ck
-    ci ⪯ ck
-    */
-    public static final rules.ipl.OnePremiseOneConclusionRule T_NOT_NOT = new rules.ipl.OnePremiseOneConclusionRule(
-        "T_NOT_NOT",
-        new TwoLevelCompositeFormulaPattern(IPLConnectives.NOT, IPLConnectives.NOT),
-        new KELabelledAction(
-            ActionType.ADD_NODE,
-            new CompositeLabelledAction(IPLConnectives.NOT, new SimpleSubformulaRoleGetter(KERuleRole.LEFT, IPLSigns.TRUE)),
-            LabelGetter.GLOBAL_NEW
-        )
-    );
+	/**
+	Regla (T∨₂) - T-Disyunción 2
+	T A∨B : ci
+	F B : cj
+	ci ⪯ cj
+	----------
+	T A : ci
+	*/
+	public static final rules.ipl.TwoPremisesOneConclusionRule T_OR_F_RIGHT = new rules.ipl.TwoPremisesOneConclusionRule(
+		"T_OR_F_RIGHT",
+		new rules.patterns.ipl.TwoSignsConnectiveRolePattern(
+			IPLSigns.TRUE,     // main sign (T A∨B : ci)
+			IPLConnectives.OR, // main connective
+			IPLSigns.FALSE,    // aux sign (F B : cj)
+			KERuleRole.RIGHT,  // aux role (B es la subfórmula derecha)
+			new LessThanLabelCondition() // ci ⪯ cj (main ≤ aux)
+		),
+		new KELabelledAction(
+			ActionType.ADD_NODE,
+			BinaryTwoPremisesConnectiveGetter.TRUE_OTHER, // T A (la otra subfórmula)
+			LabelGetter.MAIN // usa etiqueta de la premisa mayor (ci)
+		));
 
+	/**
+	Regla (F∧₁) - F-Conjunción 1
+	F A∧B : cj
+	T A : ci
+	ci ⪯ cj
+	----------
+	F B : cj
+	*/
+	public static final rules.ipl.TwoPremisesOneConclusionRule F_AND_LEFT = new rules.ipl.TwoPremisesOneConclusionRule(
+		"F_AND_LEFT",
+		new rules.patterns.ipl.TwoSignsConnectiveRolePattern(
+			IPLSigns.FALSE,    // main sign (F A∧B : cj)
+			IPLConnectives.AND, // main connective
+			IPLSigns.TRUE,     // aux sign (T A : ci)
+			KERuleRole.LEFT,   // aux role (A es la subfórmula izquierda)
+			new GreaterThanLabelCondition() // ci ⪯ cj, es decir aux ≤ main
+		),
+		new KELabelledAction(
+			ActionType.ADD_NODE,
+			BinaryTwoPremisesConnectiveGetter.FALSE_OTHER, // F B (la otra subfórmula)
+			LabelGetter.MAIN // usa etiqueta de la premisa mayor (cj)
+		));
 }
