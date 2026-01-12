@@ -7,6 +7,7 @@ package main.newstrategy.ipl;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import logic.formulas.CompositeFormula;
 import logic.formulas.Formula;
@@ -24,6 +25,7 @@ import logicalSystems.ipl.IPLRules;
 import logicalSystems.ipl.IPLSigns;
 import logic.labelledFormulas.LabelledFormulaFactory;
 import main.newstrategy.ISimpleStrategy;
+import main.proofTree.INode;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.SignedFormulaNodeState;
 import main.proofTree.iterator.IProofTreeVeryBasicIterator;
@@ -118,6 +120,13 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 System.out.println("🛑 Proviso de Terminación: Bloqueando aplicación de F→ para " + sf);
                 continue; // Saltar esta regla, no aplicarla
             }
+            
+            // PROVISO DE SATURACIÓN para regla F¬ (existencial)
+            // NO aplicar (F¬) si existe T A : ch donde ci ≤ ch (la fórmula ya está satisfecha)
+            if (r == IPLRules.F_NOT && shouldBlockFNotRule(proofTree, sf)) {
+                System.out.println("🛑 Proviso de Saturación: Bloqueando aplicación de F¬ para " + sf);
+                continue; // Saltar esta regla, no aplicarla
+            }
 
             // Para T¬, generar conclusiones para TODAS las etiquetas mayores disponibles
             boolean isTNot = isTNotFormula(sf);
@@ -126,16 +135,10 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
             if (!isTNot && proofTree instanceof IPLProofTree) {
                 IPLProofTree iplTree = (IPLProofTree) proofTree;
                 
-                // Para reglas que generan nuevas etiquetas (como F_NOT), rastrear por estructura de fórmula
-                // sin incluir la etiqueta, para evitar loops infinitos
-                String baseRuleInstance;
-                if (r == IPLRules.F_NOT) {
-                    // F_NOT genera nuevas etiquetas, así que rastreamos solo por signo + fórmula
-                    baseRuleInstance = r.toString() + ":" + getFormulaStructureKey(sf);
-                } else {
-                    // Para otras reglas, incluir la etiqueta en el rastreo
-                    baseRuleInstance = r.toString() + ":" + sf.toString();
-                }
+                // ✅ CORRECCIÓN: Todas las reglas (incluida F_NOT) deben trackear por fórmula + etiqueta
+                // según el paper: "each rule can be applied at most once for each particular choice of ls-formulas as premises"
+                // Una ls-formula incluye la etiqueta, por lo que F ¬p : c1 y F ¬p : c5 son instancias diferentes
+                String baseRuleInstance = r.toString() + ":" + sf.toString();
                 
                 if (iplTree.wasRuleInstanceApplied(baseRuleInstance)) {
                     System.out.println("⏭️ Regla de 1 premisa ya aplicada a esta fórmula: " + baseRuleInstance);
@@ -209,6 +212,14 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                     if (newFormula instanceof LabelledFormula) {
                         LabelledFormula lf = (LabelledFormula) newFormula;
                         System.out.println("✅ IPL: Fórmula con etiqueta creada: " + lf.toString());
+                        
+                        // ✅ PROPAGACIÓN FÍSICA DE MONOTONICIDAD para F→
+                        // Cuando F→ crea un nuevo label cj, debemos agregar físicamente
+                        // todas las fórmulas T compuestas que se propagan desde ci ≤ cj
+                        // Esto permite que las reglas de 2 premisas se apliquen correctamente
+                        if (r == IPLRules.F_A_IMPLIES_B_TA_FB) {
+                            propagateCompositeTFormulasForNewLabel(proofTree, lf.getLabel(), strategy);
+                        }
                     }
                     
                     actuallyAddedFormula = true;
@@ -315,25 +326,28 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         // Obtener A (la subfórmula izquierda de A→B)
         Formula aFormula = comp.getImmediateSubformulas().get(0);
         
-        // Buscar en la rama si existe T A : ch donde ch ≤ ci
-        // Según el paper: "F → is applicable only when T A : ch does not occur 
-        // for any ch ⪯ ci in the branch"
-        IProofTreeVeryBasicIterator it = proofTree.getTopDownIterator();
-        
         Context context = getContextFromLabel(ciLabel);
         if (context == null) {
             System.out.println("⚠️ Proviso: No se pudo obtener Context para verificar");
             return false; // Sin Context, no podemos verificar, no bloquear por seguridad
         }
         
-        // DEBUG: Mostrar el contenido del Context
-        System.out.println("🔍 DEBUG Proviso: Context tiene " + context.getLabels().size() + " etiquetas: " + context.getLabels());
-        System.out.println("🔍 DEBUG Proviso: Verificando si existe T " + aFormula + " : ch donde ch ≤ " + ciLabel);
+        // ✅ EXTENSIÓN b* IMPLÍCITA: Buscar en b* (no solo en b)
+        // Según el paper: "F → is applicable only when T A : ch does not occur 
+        // for any ch ⪯ ci in the branch" - esto incluye fórmulas en b*
+        System.out.println("🔍 Proviso (b*): Context tiene " + context.getLabels().size() + " etiquetas: " + context.getLabels());
+        System.out.println("🔍 Proviso (b*): Verificando si existe T " + aFormula + " : ch donde ch ≤ " + ciLabel + " en b*");
         
-        while (it.hasNext()) {
-            SignedFormulaNode sfn = (SignedFormulaNode) it.next();
-            SignedFormula candidate = (SignedFormula) sfn.getContent();
-            
+        if (!(proofTree instanceof IPLProofTree)) {
+            System.out.println("⚠️ Proviso: ProofTree no es IPLProofTree, usando búsqueda en b solamente");
+            return false; // Fallback: no bloquear
+        }
+        
+        IPLProofTree iplTree = (IPLProofTree) proofTree;
+        Set<SignedFormula> bStar = iplTree.extendBranch();
+        
+        // Buscar T A : ch en b*
+        for (SignedFormula candidate : bStar) {
             // Buscar T A : ch
             if (candidate.getSign().equals(IPLSigns.TRUE) && 
                 candidate.getFormula().equals(aFormula) &&
@@ -342,50 +356,114 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 LabelledFormula lfCandidate = (LabelledFormula) candidate;
                 FormulaLabel chLabel = lfCandidate.getLabel();
                 
-                // ✅ Verificar que la etiqueta ch sea accesible en la rama actual
-                // Esto asegura que solo consideramos etiquetas de la rama actual o ramas ancestras
-                if (proofTree instanceof IPLProofTree) {
-                    IPLProofTree iplTree = (IPLProofTree) proofTree;
-                    if (!iplTree.isLabelAccessible(chLabel)) {
-                        System.out.println("  ⏭️ Proviso: Etiqueta " + chLabel + " no accesible en rama " + iplTree.getBranchId() + ", saltando");
-                        continue; // Saltar esta fórmula, su etiqueta no es accesible
-                    }
-                }
-                
-                // DEBUG: Verificar que ambas etiquetas usan el mismo Context
-                if (chLabel instanceof ContextFormulaLabel && ciLabel instanceof ContextFormulaLabel) {
-                    Context chContext = ((ContextFormulaLabel)chLabel).getContext();
-                    Context ciContext = ((ContextFormulaLabel)ciLabel).getContext();
-                    boolean sameContext = chContext == ciContext;
-                    System.out.println("🔍 DEBUG Proviso: ch=" + chLabel + " (Context@" + System.identityHashCode(chContext) + 
-                                     "), ci=" + ciLabel + " (Context@" + System.identityHashCode(ciContext) + 
-                                     "), mismo Context? " + sameContext);
-                    if (!sameContext) {
-                        System.out.println("⚠️ WARNING: Las etiquetas usan diferentes Context - no se pueden comparar correctamente");
-                    }
+                // Verificar que la etiqueta ch sea accesible
+                if (!iplTree.isLabelAccessible(chLabel)) {
+                    continue; // Saltar esta fórmula, su etiqueta no es accesible
                 }
                 
                 // Verificar si ch ≤ ci
                 boolean chEqualsCI = chLabel.equals(ciLabel);
                 boolean chLowerOrEqualCI = context.isLowerOrEqualTo(chLabel, ciLabel);
-                boolean chLowerThanCI = context.isLowerThan(chLabel, ciLabel);
-                boolean chGreaterThanCI = context.isGreaterThan(chLabel, ciLabel);
-                
-                System.out.println("🔍 DEBUG: Comparando " + chLabel + " con " + ciLabel);
-                System.out.println("    ch == ci: " + chEqualsCI);
-                System.out.println("    ch ≤ ci: " + chLowerOrEqualCI);
-                System.out.println("    ch < ci: " + chLowerThanCI);
-                System.out.println("    ch > ci: " + chGreaterThanCI);
                 
                 if (chEqualsCI || chLowerOrEqualCI) {
-                    System.out.println("🛑 Proviso: Encontrado T " + aFormula + " : " + chLabel + 
+                    System.out.println("🛑 Proviso (b*): Encontrado T " + aFormula + " : " + chLabel + 
                                      " donde " + chLabel + " ≤ " + ciLabel);
                     return true; // BLOQUEAR la aplicación de F→
                 }
             }
         }
         
-        System.out.println("✅ Proviso: No se encontró T " + aFormula + " : ch donde ch ≤ " + ciLabel);
+        System.out.println("✅ Proviso (b*): No se encontró T " + aFormula + " : ch donde ch ≤ " + ciLabel);
+        return false; // No bloquear
+    }
+    
+    /**
+     * Proviso de saturación para la regla F¬ (regla existencial).
+     * 
+     * La regla F¬ es existencial: busca crear un sucesor con T A.
+     * Si ya existe algún ch tal que ci ≤ ch y T A : ch está en b*,
+     * entonces la fórmula F !A : ci ya está satisfecha y NO debe aplicarse.
+     * 
+     * Esto previene el loop infinito:
+     * T !!A (persistente) → F !A → F_NOT crea nuevo label → T !!A reaplica → ...
+     * 
+     * @param proofTree el árbol de prueba actual
+     * @param sf la fórmula F !A : ci a verificar
+     * @return true si la regla debe ser bloqueada, false si puede aplicarse
+     */
+    private boolean shouldBlockFNotRule(ClassicalProofTree proofTree, SignedFormula sf) {
+        // Verificar que sea F !A
+        if (!sf.getSign().equals(IPLSigns.FALSE)) {
+            return false; // No es F, no bloquear
+        }
+        
+        if (!(sf.getFormula() instanceof CompositeFormula)) {
+            return false; // No es compuesta, no bloquear
+        }
+        
+        CompositeFormula comp = (CompositeFormula) sf.getFormula();
+        if (!comp.getConnective().equals(IPLConnectives.NOT)) {
+            return false; // No es ¬, no bloquear
+        }
+        
+        // Es F !A, verificar proviso
+        if (!(sf instanceof LabelledFormula)) {
+            return false; // Sin etiqueta, no podemos verificar
+        }
+        
+        LabelledFormula lfMain = (LabelledFormula) sf;
+        FormulaLabel ciLabel = lfMain.getLabel();
+        
+        // Obtener A (la subfórmula de !A)
+        Formula aFormula = comp.getImmediateSubformulas().get(0);
+        
+        Context context = getContextFromLabel(ciLabel);
+        if (context == null) {
+            System.out.println("⚠️ Proviso F¬: No se pudo obtener Context para verificar");
+            return false; // Sin Context, no podemos verificar, no bloquear por seguridad
+        }
+        
+        // ✅ EXTENSIÓN b* IMPLÍCITA: Buscar en b* (no solo en b)
+        // Según Definition 5.6: F !A : ci está saturada si existe T A : ch donde ci ≤ ch en b*
+        System.out.println("🔍 Proviso F¬ (b*): Context tiene " + context.getLabels().size() + " etiquetas: " + context.getLabels());
+        System.out.println("🔍 Proviso F¬ (b*): Verificando si existe T " + aFormula + " : ch donde " + ciLabel + " ≤ ch en b*");
+        
+        if (!(proofTree instanceof IPLProofTree)) {
+            System.out.println("⚠️ Proviso F¬: ProofTree no es IPLProofTree");
+            return false; // Fallback: no bloquear
+        }
+        
+        IPLProofTree iplTree = (IPLProofTree) proofTree;
+        Set<SignedFormula> bStar = iplTree.extendBranch();
+        
+        // Buscar T A : ch en b*
+        for (SignedFormula candidate : bStar) {
+            // Buscar T A : ch
+            if (candidate.getSign().equals(IPLSigns.TRUE) && 
+                candidate.getFormula().equals(aFormula) &&
+                candidate instanceof LabelledFormula) {
+                
+                LabelledFormula lfCandidate = (LabelledFormula) candidate;
+                FormulaLabel chLabel = lfCandidate.getLabel();
+                
+                // Verificar que la etiqueta ch sea accesible
+                if (!iplTree.isLabelAccessible(chLabel)) {
+                    continue; // Saltar esta fórmula, su etiqueta no es accesible
+                }
+                
+                // Verificar si ci ≤ ch (opuesto a F→!)
+                boolean chEqualsCI = chLabel.equals(ciLabel);
+                boolean ciLowerOrEqualCH = context.isLowerOrEqualTo(ciLabel, chLabel);
+                
+                if (chEqualsCI || ciLowerOrEqualCH) {
+                    System.out.println("🛑 Proviso F¬ (b*): Encontrado T " + aFormula + " : " + chLabel + 
+                                     " donde " + ciLabel + " ≤ " + chLabel + " - Fórmula saturada");
+                    return true; // BLOQUEAR la aplicación de F¬
+                }
+            }
+        }
+        
+        System.out.println("✅ Proviso F¬ (b*): No se encontró T " + aFormula + " : ch donde " + ciLabel + " ≤ ch - Puede aplicarse");
         return false; // No bloquear
     }
     
@@ -400,39 +478,31 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
     }
     
     /**
-     * Verifica si una fórmula es T ¬A donde A NO es una negación.
-     * Solo estas fórmulas son "persistentes" y deben reaplicarse cuando aparecen nuevas etiquetas.
+     * ✅ ACTIVADO: T¬ ES persistente (regla gamma)
      * 
-     * IMPORTANTE: T ¬¬A NO es persistente, debe tratarse como una regla normal para evitar loops.
+     * Las fórmulas T¬ deben reaplicarse cuando aparecen nuevos labels:
+     * - Son reglas gamma que deben aplicarse a todos los mundos accesibles
+     * - Cuando aparece un nuevo cj donde ci ⪯ cj, debe generarse físicamente F A : cj
+     * - Por eso, T¬ nunca se marca como ANALYSED
+     * 
+     * @return true si es T¬A (cualquier negación), false en caso contrario
      */
     private boolean isTNotFormula(SignedFormula sf) {
+        if (sf == null) return false;
+        
+        // Verificar que sea T-signed
         if (!sf.getSign().equals(IPLSigns.TRUE)) {
             return false;
         }
         
-        if (!(sf.getFormula() instanceof CompositeFormula)) {
-            return false;
+        // Verificar que la fórmula sea una negación (¬A)
+        Formula formula = sf.getFormula();
+        if (formula instanceof CompositeFormula) {
+            CompositeFormula comp = (CompositeFormula) formula;
+            return comp.getConnective().equals(IPLConnectives.NOT);
         }
         
-        CompositeFormula comp = (CompositeFormula) sf.getFormula();
-        if (!comp.getConnective().equals(IPLConnectives.NOT)) {
-            return false;
-        }
-        
-        // Verificar que la subfórmula NO sea una negación
-        // Si es T ¬¬A, NO debe ser persistente (para evitar loop infinito)
-        Formula subformula = comp.getImmediateSubformulas().get(0);
-        if (subformula instanceof CompositeFormula) {
-            CompositeFormula subComp = (CompositeFormula) subformula;
-            if (subComp.getConnective().equals(IPLConnectives.NOT)) {
-                // Es T ¬¬A, NO es persistente
-                System.out.println("🔍 T¬¬: " + sf + " NO es persistente (doble negación)");
-                return false;
-            }
-        }
-        
-        // Es T ¬A donde A no es negación: ES persistente
-        return true;
+        return false;
     }
     
     /**
@@ -501,16 +571,96 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
     }
     
     /**
-     * Extrae la estructura de la fórmula (signo + fórmula) sin la etiqueta.
-     * Esto se usa para rastrear instancias de reglas que generan nuevas etiquetas,
-     * donde queremos evitar aplicar la misma regla a la misma estructura de fórmula
-     * con diferentes etiquetas.
+     * Propaga físicamente las fórmulas T compuestas por monotonicidad cuando se crea un nuevo label.
      * 
-     * @param sf la fórmula firmada (puede ser LabelledFormula o SignedFormula)
-     * @return clave que identifica solo el signo y la estructura de la fórmula
+     * Cuando F→ crea un nuevo label cj, debemos agregar físicamente todas las fórmulas T compuestas
+     * (especialmente T→) que tengan labels ci donde ci ≤ cj. Esto permite que las reglas de 2 premisas
+     * (reglas beta) se apliquen correctamente sobre estas fórmulas propagadas.
+     * 
+     * Por ejemplo, si tenemos T (A→B) : c1 y se crea c3 donde c1 ≤ c3, entonces agregamos
+     * físicamente T (A→B) : c3 para que X_IMPLIES_F_RIGHT pueda aplicarse con F B : c3.
+     * 
+     * @param proofTree el árbol de prueba actual
+     * @param newLabel el nuevo label recién creado
+     * @param strategy la estrategia para crear orígenes
      */
-    private String getFormulaStructureKey(SignedFormula sf) {
-        return sf.getSign().toString() + " " + sf.getFormula().toString();
+    private void propagateCompositeTFormulasForNewLabel(ClassicalProofTree proofTree, 
+                                                        FormulaLabel newLabel,
+                                                        ISimpleStrategy strategy) {
+        if (!(proofTree instanceof IPLProofTree)) {
+            return; // Solo aplicable a IPL
+        }
+        
+        IPLProofTree iplTree = (IPLProofTree) proofTree;
+        Context context = getContextFromLabel(newLabel);
+        if (context == null) {
+            System.out.println("⚠️ Monotonicidad: No se pudo obtener Context para propagar");
+            return;
+        }
+        
+        System.out.println("🔄 Monotonicidad: Propagando fórmulas T compuestas al nuevo label " + newLabel);
+        
+        // Iterar sobre todas las fórmulas en la rama actual
+        IProofTreeVeryBasicIterator it = proofTree.getTopDownIterator();
+        int propagatedCount = 0;
+        
+        while (it.hasNext()) {
+            INode node = it.next();
+            if (!(node instanceof SignedFormulaNode)) {
+                continue;
+            }
+            
+            SignedFormulaNode sfNode = (SignedFormulaNode) node;
+            SignedFormula sf = (SignedFormula) sfNode.getContent();
+            
+            // Solo fórmulas T compuestas
+            if (!sf.getSign().equals(IPLSigns.TRUE)) {
+                continue;
+            }
+            
+            if (!(sf.getFormula() instanceof CompositeFormula)) {
+                continue; // Solo fórmulas compuestas
+            }
+            
+            if (!(sf instanceof LabelledFormula)) {
+                continue; // Debe tener label
+            }
+            
+            LabelledFormula lf = (LabelledFormula) sf;
+            FormulaLabel ciLabel = lf.getLabel();
+            
+            if (!iplTree.isLabelAccessible(ciLabel)) {
+                continue; // Label no accesible
+            }
+            
+            // Verificar si ci ≤ cj (nuevo label)
+            boolean ciLowerOrEqualNew = ciLabel.equals(newLabel) || 
+                                       context.isLowerOrEqualTo(ciLabel, newLabel);
+            
+            if (ciLowerOrEqualNew && !ciLabel.equals(newLabel)) {
+                // Crear nueva instancia física con el nuevo label
+                SignedFormula baseSf = lf.getSignedFormula();
+                LabelledFormula propagated = new LabelledFormula(newLabel, baseSf);
+                
+                // Verificar si ya existe
+                if (proofTree.getNode(propagated) != null) {
+                    continue; // Ya existe, no agregar duplicado
+                }
+                
+                // Agregar físicamente a la rama (usando NullRule para indicar propagación por monotonicidad)
+                proofTree.addLast(new SignedFormulaNode(propagated, SignedFormulaNodeState.NOT_ANALYSED,
+                        strategy.createOrigin(NullRule.INSTANCE, (SignedFormulaNode) node, null)));
+                
+                propagatedCount++;
+                System.out.println("  ➕ Propagada: " + propagated + " (desde " + lf + ")");
+            }
+        }
+        
+        if (propagatedCount > 0) {
+            System.out.println("✅ Monotonicidad: " + propagatedCount + " fórmulas T compuestas propagadas a " + newLabel);
+        } else {
+            System.out.println("⏭️ Monotonicidad: Ninguna fórmula T compuesta para propagar a " + newLabel);
+        }
     }
-
+    
 }

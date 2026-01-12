@@ -104,7 +104,7 @@ public class IPLRules {
                 IPLConnectives.IMPLIES,
                 IPLSigns.TRUE, 
                 KERuleRole.LEFT,
-                new NoLabelCondition()), 
+                new GreaterBinaryRelationLabelCondition()), // ✅ CORRECCIÓN: Verificar que existe ck tal que ci ≤ ck y cj ≤ ck
         new KELabelledAction(ActionType.ADD_NODE,
                 new rules.ipl.SubformulaRoleGetter(pattern_X_IMPLIES_T_LEFT, KERuleRole.RIGHT),
                 new MinimalGreaterLabelGetter()

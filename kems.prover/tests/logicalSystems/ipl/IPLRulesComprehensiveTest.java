@@ -1266,9 +1266,6 @@ public class IPLRulesComprehensiveTest {
     
     @Test
     public void testRule18_T_NOT_NOT_NewLabel() {
-        System.out.println("\n=== TEST REGLA 18: T_NOT_NOT (Caso básico) ===");
-        System.out.println("T ¬¬P c0 → T P ck (ck nuevo, c0 ⪯ ck)");
-        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "T -(-P) c0");
@@ -1277,12 +1274,8 @@ public class IPLRulesComprehensiveTest {
             
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-            
-            // Verificar que se generó T P con nueva label (no c0)
+
             assertTrue("Debe generar T P con label nueva", treeOutput.contains("T P c3") && !treeOutput.contains("T P c0"));
-            
-            System.out.println("✅ REGLA 18 (T_NOT_NOT): NewLabelGetter básico - CORRECTA");
-            
         } catch (Exception e) {
             fail("Error en test T_NOT_NOT básico: " + e.getMessage());
         }
@@ -1684,7 +1677,7 @@ public class IPLRulesComprehensiveTest {
         try {
             Context context = new Context();
             context.getNewFormulaLabel();
-            Proof proof = proveFormulas( "F ->(*(*(->(*(->(p1 p2) ->(p2 p1)) q) ->(*(->(p2 p3) ->(p3 p2)) q)) ->(*(->(p3 p1) ->(p1 p3)) q)) q) c0");
+            Proof proof = proveFormulas( "F ->(*(*(->(*(->(p1 p2) ->(p2 p1)) *(p1 *(p2 p3))) ->(*(->(p2 p3) ->(p3 p2)) *(p1 *(p2 p3)))) ->(*(->(p3 p1) ->(p1 p3)) *(p1 *(p2 p3)))) *(p1 *(p2 p3))) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
 

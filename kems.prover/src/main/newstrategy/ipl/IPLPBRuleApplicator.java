@@ -12,6 +12,7 @@ import logic.signedFormulas.FormulaSign;
 import logic.signedFormulas.PBCandidateList;
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.SignedFormulaBuilder;
+import logicalSystems.ipl.IPLConnectives;
 import logicalSystems.ipl.IPLProofTree;
 import logicalSystems.ipl.IPLSignedFormulaFactory;
 import logicalSystems.ipl.IPLRules;
@@ -142,34 +143,31 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     }
     
     /**
-     * Verifica si una fórmula es T ¬A (donde A no es negación).
-     * Estas son las fórmulas persistentes que nunca se marcan como ANALYSED.
+     * ✅ ACTIVADO: T¬ ES persistente (regla gamma)
+     * 
+     * Las fórmulas T¬ deben reaplicarse cuando aparecen nuevos labels:
+     * - Son reglas gamma que deben aplicarse a todos los mundos accesibles
+     * - Cuando aparece un nuevo cj donde ci ⪯ cj, debe generarse físicamente F A : cj
+     * - Por eso, T¬ nunca se marca como ANALYSED
+     * 
+     * @return true si es T¬A (cualquier negación), false en caso contrario
      */
     private boolean isTNotFormula(SignedFormula sf) {
+        if (sf == null) return false;
+        
+        // Verificar que sea T-signed
         if (!sf.getSign().equals(IPLSigns.TRUE)) {
             return false;
         }
         
+        // Verificar que la fórmula sea una negación (¬A)
         Formula formula = sf.getFormula();
-        if (!(formula instanceof CompositeFormula)) {
-            return false;
+        if (formula instanceof CompositeFormula) {
+            CompositeFormula comp = (CompositeFormula) formula;
+            return comp.getConnective().equals(IPLConnectives.NOT);
         }
         
-        CompositeFormula comp = (CompositeFormula) formula;
-        if (!comp.getConnective().equals(logicalSystems.ipl.IPLConnectives.NOT)) {
-            return false;
-        }
-        
-        // Verificar que la subfórmula NO sea negación (evitar T ¬¬A)
-        Formula subformula = comp.getImmediateSubformulas().get(0);
-        if (subformula instanceof CompositeFormula) {
-            CompositeFormula subComp = (CompositeFormula) subformula;
-            if (subComp.getConnective().equals(logicalSystems.ipl.IPLConnectives.NOT)) {
-                return false; // T ¬¬A no es persistente
-            }
-        }
-        
-        return true; // T ¬A donde A no es negación
+        return false;
     }
     
     /**
@@ -199,70 +197,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         return false;
     }
     
-    /**
-     * Encuentra la rama ancestra donde está una fórmula (la raíz del grupo de accesibilidad para esa fórmula).
-     * Si la fórmula está en la rama actual, retorna el branchId de la rama actual.
-     * Si está en un ancestro, retorna el branchId de ese ancestro (el más cercano donde está la fórmula).
-     * 
-     * Esto se usa para determinar dónde registrar el tracking de PB: debe registrarse en la rama
-     * donde está la fórmula, para que todas las ramas descendientes (que están en el mismo grupo)
-     * puedan ver que PB ya se aplicó.
-     * 
-     * @param current la rama actual
-     * @param formula la fórmula a buscar
-     * @return el branchId donde está la fórmula, o null si no se encuentra
-     */
-    private String findBranchIdOfFormula(ClassicalProofTree current, SignedFormula formula) {
-        // IMPORTANTE: Buscar primero en ancestros, porque si la fórmula está en un ancestro,
-        // debemos registrar el PB en ese ancestro (no en la rama actual) para que todas las
-        // ramas descendientes vean el registro. Solo si no está en ningún ancestro, está en la rama actual.
-        
-        // Buscar en ancestros (subiendo por la cadena de padres)
-        if (current instanceof logicalSystems.ipl.IPLProofTree) {
-            main.proofTree.IProofTree parent = current.getParent();
-            while (parent != null) {
-                if (parent instanceof logicalSystems.ipl.IPLProofTree) {
-                    logicalSystems.ipl.IPLProofTree iplParent = (logicalSystems.ipl.IPLProofTree) parent;
-                    main.proofTree.iterator.IProofTreeBasicIterator parentIt = iplParent.getLocalIterator();
-                    
-                    while (parentIt.hasNext()) {
-                        main.proofTree.INode node = parentIt.next();
-                        if (node instanceof SignedFormulaNode) {
-                            SignedFormula candidate = (SignedFormula) ((SignedFormulaNode) node).getContent();
-                            if (candidate.equals(formula)) {
-                                String branchId = iplParent.getBranchId();
-                                System.out.println("   🔍 Fórmula encontrada en rama ancestra: " + branchId);
-                                return branchId;
-                            }
-                        }
-                    }
-                }
-                parent = parent.getParent();
-            }
-        }
-        
-        // Si no está en ningún ancestro, buscar en la rama actual
-        main.proofTree.iterator.IProofTreeBasicIterator localIt = current.getLocalIterator();
-        while (localIt.hasNext()) {
-            main.proofTree.INode node = localIt.next();
-            if (node instanceof SignedFormulaNode) {
-                SignedFormula candidate = (SignedFormula) ((SignedFormulaNode) node).getContent();
-                // Comparar por signo, fórmula y etiqueta (deben ser iguales exactamente)
-                if (candidate.equals(formula)) {
-                    if (current instanceof logicalSystems.ipl.IPLProofTree) {
-                        String branchId = ((logicalSystems.ipl.IPLProofTree) current).getBranchId();
-                        System.out.println("   🔍 Fórmula encontrada en rama actual: " + branchId);
-                        return branchId;
-                    }
-                    return null;
-                }
-            }
-        }
-        
-        System.out.println("   ⚠️ Fórmula no encontrada en rama actual ni ancestros");
-        return null; // No encontrada
-    }
-
     /**
      * Encuentra todas las fórmulas compuestas en el árbol que podrían beneficiarse de PB.
      * Usa orden FIFO: las fórmulas se procesan en el orden en que fueron agregadas al árbol
@@ -637,25 +571,12 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     private boolean applyPBAndTwoPremiseRule(ClassicalProofTree current, SignedFormulaBuilder sfb,
             SignedFormula mainPremise, Rule rule, SignedFormula requiredAux) {
         
-        // Verificar rinstances POR RAMA: evitar reaplicar PB al mismo candidato con la misma regla
-        // en la misma rama (pero permitir aplicarlo en ramas diferentes)
-        String pbInstanceKey = "PB:" + rule.toString() + ":" + mainPremise.toString() + ":" + requiredAux.toString();
-        System.out.println("DEBUG: Checking PB rinstance (por rama): " + pbInstanceKey);
-        
-        if (current instanceof IPLProofTree) {
-            IPLProofTree iplTree = (IPLProofTree) current;
-            if (iplTree.wasPBRuleInstanceApplied(pbInstanceKey)) {
-                System.out.println("⏭️ PB ya aplicado a este candidato con esta regla en esta rama (PB rinstances): " + pbInstanceKey);
-                return false;
-            }
-        }
-        
-        System.out.println("🔥 IPL PBRuleApplicator: Aplicando PB + regla de 2 premisas");
+        System.out.println("🔥 IPL PBRuleApplicator: Evaluando PB + regla de 2 premisas");
         System.out.println("   Premisa mayor: " + mainPremise);
         System.out.println("   Regla: " + rule.toString());
         System.out.println("   Auxiliar requerido: " + requiredAux);
         
-        // PASO 1: Aplicar PB para crear la premisa menor faltante
+        // PASO 1: Obtener la etiqueta compartida (la misma que la premisa mayor)
         // PB debe crear ambas ramas con la MISMA etiqueta que la premisa mayor
         
         FormulaLabel sharedLabel = mainPremise.getLabel();
@@ -676,13 +597,66 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             System.out.println("🔄 Convertida etiqueta a ContextFormulaLabel: " + contextSharedLabel);
         }
         
+        // PASO 2: Verificar si las fórmulas que se generarían al aplicar PB ya existen
+        // en el grupo de accesibilidad (rama actual y ancestras)
+        // Si ya existen, no tiene sentido aplicar PB porque generaría ramas redundantes
+        
+        // Calcular el signo opuesto (se usará para la verificación y para crear la fórmula opuesta)
+        FormulaSign oppositeSign = requiredAux.getSign().equals(IPLSigns.TRUE) ? 
+            (FormulaSign) IPLSigns.FALSE : (FormulaSign) IPLSigns.TRUE;
+        
+        if (current instanceof IPLProofTree) {
+            IPLProofTree iplTree = (IPLProofTree) current;
+            
+            // Verificar si el auxiliar requerido (rama izquierda) ya existe con esta etiqueta
+            // Si existe, podemos aplicar la regla directamente sin PB, así que no tiene sentido aplicar PB
+            SignedFormula existingRequired = iplTree.findFormulaWithSignAndLabel(
+                requiredAux.getFormula(), 
+                requiredAux.getSign(),
+                contextSharedLabel
+            );
+            
+            if (existingRequired != null) {
+                System.out.println("⏭️ PB no aplicado: auxiliar requerido ya existe en el grupo de accesibilidad: " + existingRequired);
+                System.out.println("   Si el auxiliar requerido existe, la regla debería poder aplicarse directamente sin PB");
+                return false;
+            }
+            
+            // Verificar si el auxiliar opuesto (rama derecha) ya existe con esta etiqueta
+            // Si existe, no tiene sentido aplicar PB porque la rama derecha sería redundante
+            SignedFormula existingOpposite = iplTree.findFormulaWithSignAndLabel(
+                requiredAux.getFormula(), 
+                oppositeSign,
+                contextSharedLabel
+            );
+            
+            if (existingOpposite != null) {
+                System.out.println("⏭️ PB no aplicado: auxiliar opuesto ya existe en el grupo de accesibilidad: " + existingOpposite);
+                System.out.println("   Si el auxiliar opuesto ya existe, la rama derecha de PB sería redundante");
+                return false;
+            }
+        }
+        
+        // PASO 2b: Verificar si ya se aplicó PB sobre esta combinación en el grupo de accesibilidad
+        // (rama actual o alguna de sus ancestras). Esto previene loops infinitos.
+        String pbInstanceKey = "PB:" + rule.toString() + ":" + mainPremise.toString() + ":" + requiredAux.toString();
+        
+        if (current instanceof IPLProofTree) {
+            IPLProofTree iplTree = (IPLProofTree) current;
+            if (iplTree.wasPBRuleInstanceAppliedInAccessibilityGroup(pbInstanceKey)) {
+                System.out.println("⏭️ PB no aplicado: ya se aplicó PB sobre esta combinación en el grupo de accesibilidad: " + pbInstanceKey);
+                return false;
+            }
+        }
+        
+        System.out.println("✅ Las fórmulas que se generarían no existen y PB no fue aplicado antes - aplicando PB");
+        
+        // PASO 3: Aplicar PB para crear la premisa menor faltante
         // Crear auxiliar requerido con la etiqueta compartida (ContextFormulaLabel)
         SignedFormula auxWithSharedLabel = createIPLSignedFormulaWithLabel(sfb, 
             (FormulaSign) requiredAux.getSign(), requiredAux.getFormula(), contextSharedLabel);
         
         // Crear auxiliar opuesto con la MISMA etiqueta compartida (ContextFormulaLabel)
-        FormulaSign oppositeSign = requiredAux.getSign().equals(IPLSigns.TRUE) ? 
-            (FormulaSign) IPLSigns.FALSE : (FormulaSign) IPLSigns.TRUE;
         SignedFormula auxOpposite = createIPLSignedFormulaWithLabel(sfb, 
             oppositeSign, requiredAux.getFormula(), contextSharedLabel);
         
@@ -725,16 +699,12 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         
         System.out.println("✅ Regla 2 premisas aplicada: " + conclusion);
         
-        // Registrar en rinstances de la rama ACTUAL (su grupo de accesibilidad).
-        // Cuando una rama aplica PB sobre una fórmula (ya sea de la rama actual o de un ancestro),
-        // se registra en la rama actual. Esto permite que:
-        // - Ramas hermanas apliquen PB sobre la misma fórmula ancestral (no comparten el mismo grupo)
-        // - Ramas descendientes de esta rama no apliquen PB de nuevo (están en el mismo grupo)
+        // Registrar PB en la rama actual (donde se aplica PB) para prevenir loops infinitos
+        // Se registra en la rama actual, no donde está la fórmula, para permitir que
+        // ramas hermanas apliquen PB independientemente
         if (current instanceof IPLProofTree) {
             IPLProofTree iplTree = (IPLProofTree) current;
-            
-            // Registrar en la rama actual (su grupo de accesibilidad incluye esta rama y todos sus ancestros)
-            iplTree.registerPBRuleInstance(pbInstanceKey);
+            iplTree.registerPBRuleInstance(pbInstanceKey); // Registra en la rama actual
         }
         
         // Actualizar estructuras de control

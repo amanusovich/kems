@@ -1,13 +1,11 @@
 package rules.ipl.labels;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import logic.labelledFormulas.ContextFormulaLabel;
 import logic.labelledFormulas.Context;
 import logic.labelledFormulas.FormulaLabel;
-import logic.labelledFormulas.LabelledFormula;
 import logic.signedFormulas.SignedFormulaList;
 
 /**
@@ -51,19 +49,22 @@ public class MinimalGreaterLabelGetter extends LabelGetter {
     }
     
     /**
-     * Busca la etiqueta mínima existente en el contexto que sea >= maxLabel
+     * Busca la etiqueta mínima existente en el contexto que sea >= ambas premisas.
+     * Si no existe ninguna, lanza una excepción porque la regla no debería aplicarse.
+     * 
+     * IMPORTANTE: Este método asume que la condición de existencia de tal etiqueta
+     * ya fue verificada antes de intentar aplicar la regla (por ejemplo, mediante
+     * GreaterBinaryRelationLabelCondition). Si no existe, la regla simplemente
+     * no se puede aplicar.
      */
     private FormulaLabel findMinimalGreaterOrEqualLabel(Context context, FormulaLabel label1, FormulaLabel label2) {
-        // Primero verificar si maxLabel ya es suficiente
-        // (si maxLabel >= ambas premisas, puede ser la respuesta)
-        
-        // Buscar todas las etiquetas en el contexto que sean >= maxLabel
+        // Buscar todas las etiquetas en el contexto que sean >= ambas premisas
         List<FormulaLabel> candidateLabels = context.getLabels().stream()
             .filter(label -> context.isGreaterOrEqualTo(label, label1) && context.isGreaterOrEqualTo(label, label2))
             .collect(Collectors.toList());
         
         if (!candidateLabels.isEmpty()) {
-            // Encontrar la mínima entre las candidatas
+            // Encontrar la mínima entre las candidatas (menor índice)
             FormulaLabel minimalCandidate = candidateLabels.get(0);
             for (FormulaLabel candidate : candidateLabels) {
                 if (candidate.getIndex() < minimalCandidate.getIndex()) {
@@ -72,8 +73,11 @@ public class MinimalGreaterLabelGetter extends LabelGetter {
             }
             return minimalCandidate;
         } else {
-            // Should not happen, do exception
-            throw new RuntimeException("No candidate label found");
+            // No existe ninguna etiqueta que cumpla la condición
+            // Esto significa que la regla NO se puede aplicar
+            // La excepción indica que se intentó aplicar una regla cuando no se cumplía la condición
+            throw new RuntimeException("No candidate label found - rule condition not satisfied: " + 
+                "no label exists that is >= both " + label1 + " and " + label2);
         }
     }
     

@@ -5,7 +5,10 @@ import java.util.HashSet;
 import java.util.Set;
 
 import logic.formulas.CompositeFormula;
+import logic.formulas.Formula;
+import logicalSystems.ipl.IPLConnectives;
 import logicalSystems.ipl.IPLProofTree;
+import logicalSystems.ipl.IPLSigns;
 import main.newstrategy.ISimpleStrategy;
 import main.proofTree.INode;
 import main.proofTree.IProofTree;
@@ -70,11 +73,12 @@ public class IPLCanonicalStrategyImplementation {
         
         // Line 3: while T is neither closed nor completed do
         LinkedList<IProofTree> openBranches = new LinkedList<>();
-        openBranches.addFirst(T);
+        openBranches.addLast(T);  // Usar addLast para consistencia con el orden FIFO
         strategy.setOpenBranches(openBranches);
         
         while (!openBranches.isEmpty() && !T.isClosed()) {
             // Line 4: select an open branch b in T
+            // Usar removeFirst con addLast para procesar en orden FIFO (breadth-first)
             ClassicalProofTree b = (ClassicalProofTree) openBranches.removeFirst();
             strategy.setCurrent(b);
             
@@ -98,18 +102,20 @@ public class IPLCanonicalStrategyImplementation {
                         
                         // PB siempre crea ramas cuando se aplica exitosamente
                         // Add child branches to the list of open branches
-                        if (b.getRight() != null) {
-                            ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
-                            if (!rightBranch.isClosed()) {
-                                openBranches.addFirst(rightBranch);
-                                System.out.println("  ➡️ Added right branch to queue");
-                            }
-                        }
+                        // Usar addLast para procesar en orden FIFO (breadth-first)
+                        // Agregar primero izquierda, luego derecha para procesar izquierda primero
                         if (b.getLeft() != null) {
                             ClassicalProofTree leftBranch = (ClassicalProofTree) b.getLeft();
                             if (!leftBranch.isClosed()) {
-                                openBranches.addFirst(leftBranch);
+                                openBranches.addLast(leftBranch);
                                 System.out.println("  ⬅️ Added left branch to queue");
+                            }
+                        }
+                        if (b.getRight() != null) {
+                            ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
+                            if (!rightBranch.isClosed()) {
+                                openBranches.addLast(rightBranch);
+                                System.out.println("  ➡️ Added right branch to queue");
                             }
                         }
                         // Current branch now has children, stop processing it
@@ -131,26 +137,29 @@ public class IPLCanonicalStrategyImplementation {
                     // Reset failed formulas on successful application
                     failedFormulas.clear();
                     
-                    // Reactivate all ANALYSED formulas so they can be reconsidered with new formulas
-                    // This is crucial for 2-premise rules that can apply multiple times with different auxiliaries
-                    reactivateAnalyzedFormulas(b);
+                    // ✅ DESACTIVADO: Reactivación ya no es necesaria con monotonicidad retroactiva
+                    // La monotonicidad retroactiva propaga automáticamente las fórmulas T-signadas
+                    // cuando se crean nuevas etiquetas, eliminando la necesidad de reactivación
+                    // reactivateAnalyzedFormulas(b);
                     
                     // Check if new branches were created (e.g., by PB rule)
                     if (b.getLeft() != null || b.getRight() != null) {
                         System.out.println("🌳 Branching detected - adding child branches to process");
                         // Add child branches to the list of open branches
-                        if (b.getRight() != null) {
-                            ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
-                            if (!rightBranch.isClosed()) {
-                                openBranches.addFirst(rightBranch);
-                                System.out.println("  ➡️ Added right branch to queue");
-                            }
-                        }
+                        // Usar addLast para procesar en orden FIFO (breadth-first)
+                        // Agregar primero izquierda, luego derecha para procesar izquierda primero
                         if (b.getLeft() != null) {
                             ClassicalProofTree leftBranch = (ClassicalProofTree) b.getLeft();
                             if (!leftBranch.isClosed()) {
-                                openBranches.addFirst(leftBranch);
+                                openBranches.addLast(leftBranch);
                                 System.out.println("  ⬅️ Added left branch to queue");
+                            }
+                        }
+                        if (b.getRight() != null) {
+                            ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
+                            if (!rightBranch.isClosed()) {
+                                openBranches.addLast(rightBranch);
+                                System.out.println("  ➡️ Added right branch to queue");
                             }
                         }
                         // Current branch now has children, stop processing it
@@ -171,25 +180,28 @@ public class IPLCanonicalStrategyImplementation {
                             // Check if new branches were created
                             if (b.getLeft() != null || b.getRight() != null) {
                                 System.out.println("🌳 Branching detected after PB - adding child branches to process");
-                                if (b.getRight() != null) {
-                                    ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
-                                    if (!rightBranch.isClosed()) {
-                                        openBranches.addFirst(rightBranch);
-                                        System.out.println("  ➡️ Added right branch to queue");
-                                    }
-                                }
+                                // Usar addLast para procesar en orden FIFO (breadth-first)
+                                // Agregar primero izquierda, luego derecha para procesar izquierda primero
                                 if (b.getLeft() != null) {
                                     ClassicalProofTree leftBranch = (ClassicalProofTree) b.getLeft();
                                     if (!leftBranch.isClosed()) {
-                                        openBranches.addFirst(leftBranch);
+                                        openBranches.addLast(leftBranch);
                                         System.out.println("  ⬅️ Added left branch to queue");
+                                    }
+                                }
+                                if (b.getRight() != null) {
+                                    ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
+                                    if (!rightBranch.isClosed()) {
+                                        openBranches.addLast(rightBranch);
+                                        System.out.println("  ➡️ Added right branch to queue");
                                     }
                                 }
                                 break;
                             } else {
                                 // PB aplicado pero no creó ramas - resetear y continuar
                                 failedFormulas.clear();
-                                reactivateAnalyzedFormulas(b);
+                                // ✅ DESACTIVADO: Reactivación ya no es necesaria con monotonicidad retroactiva
+                                // reactivateAnalyzedFormulas(b);
                                 continue;
                             }
                         } else {
@@ -468,34 +480,31 @@ public class IPLCanonicalStrategyImplementation {
     }
     
     /**
-     * Checks if a formula is T¬A (persistent).
+     * ✅ ACTIVADO: T¬ ES persistente (regla gamma)
+     * 
+     * Las fórmulas T¬ deben reaplicarse cuando aparecen nuevos labels:
+     * - Son reglas gamma que deben aplicarse a todos los mundos accesibles
+     * - Cuando aparece un nuevo cj donde ci ⪯ cj, debe generarse físicamente F A : cj
+     * - Por eso, T¬ nunca se marca como ANALYSED
+     * 
+     * @return true si es T¬A (cualquier negación), false en caso contrario
      */
     private boolean isTNotPersistent(SignedFormula sf) {
-        if (!(sf.getFormula() instanceof CompositeFormula)) {
+        if (sf == null) return false;
+        
+        // Verificar que sea T-signed
+        if (!sf.getSign().equals(IPLSigns.TRUE)) {
             return false;
         }
         
-        CompositeFormula comp = (CompositeFormula) sf.getFormula();
-        
-        // Check if it's T ¬A
-        if (!sf.getSign().equals(logicalSystems.ipl.IPLSigns.TRUE)) {
-            return false;
+        // Verificar que la fórmula sea una negación (¬A)
+        Formula formula = sf.getFormula();
+        if (formula instanceof CompositeFormula) {
+            CompositeFormula comp = (CompositeFormula) formula;
+            return comp.getConnective().equals(IPLConnectives.NOT);
         }
         
-        if (!comp.getConnective().equals(logicalSystems.ipl.IPLConnectives.NOT)) {
-            return false;
-        }
-        
-        // Check if A is not a negation (to avoid T¬¬A)
-        logic.formulas.Formula subformula = comp.getImmediateSubformulas().get(0);
-        if (subformula instanceof CompositeFormula) {
-            CompositeFormula subComp = (CompositeFormula) subformula;
-            if (subComp.getConnective().equals(logicalSystems.ipl.IPLConnectives.NOT)) {
-                return false; // T¬¬A is not persistent
-            }
-        }
-        
-        return true; // T¬A is persistent
+        return false;
     }
     
     /**

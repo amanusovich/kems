@@ -541,31 +541,40 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 		return ruleName + ":" + main.toString() + ":" + aux.toString();
 	}
 
+	/**
+	 * ⚠️ CORRECCIÓN: Busca premisas auxiliares en b (NO en b*)
+	 * 
+	 * Según Algorithm 1 línea 771: "if the corresponding minor premise of r is in b then"
+	 * Las premisas auxiliares deben estar FÍSICAMENTE en b, no solo implícitamente en b*.
+	 * 
+	 * La extensión b* se usa SOLO para:
+	 * - Verificar cierre (contradicciones)
+	 * - Verificar provisos (como F→1)
+	 * - Verificar completitud
+	 * 
+	 * Pero NO para buscar premisas auxiliares de reglas operacionales.
+	 */
 	protected SignedFormulaList getReferences(ClassicalProofTree proofTree,
 			SignedFormulaList sflInput) {
 
-		// TODO do as in simple strategy? keep it in memory?
-		// TODO do it top-down?
-
 		SignedFormulaList sflResult = new SignedFormulaList();
 
-		// iterates (bottom up) over the branch
+		// Buscar en b (físicamente en la rama), no en b*
 		IProofTreeVeryBasicIterator it = proofTree.getTopDownIterator();
 
 		while (it.hasNext()) {
-
 			SignedFormulaNode sfn = (SignedFormulaNode) it.next();
-
 			SignedFormula sf = (SignedFormula) sfn.getContent();
-			//if (sflInput.contains((SignedFormula) sfn.getContent())) {
+			
 			if (formulaLevelContains(sflInput,sf)) {
 				// Solo agregar si no es un duplicado (misma fórmula, signo Y etiqueta)
 				if (!containsExactFormula(sflResult, sf)) {
 					sflResult.add(sf);
 				}
 			}
-
 		}
+		
+		System.out.println("🔍 getReferences (b): Encontradas " + sflResult.size() + " premisas auxiliares en b (físicamente)");
 		return sflResult;
 	}
 	
