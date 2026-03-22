@@ -82,15 +82,12 @@ public class SignCompositeRoleSubformulaPattern implements IBinarySignedFormulaP
     private boolean matches(Formula main, LabelledFormula auxiliary) {
 
         boolean mainMatch = matchesConnective(main);
-        // System.err.println(mainMatch);
 
         if (mainMatch) {
             List<Formula> l = _auxiliaryRole.getFormulas(main);
 
             for (int i = 0; i < l.size(); i++) {
                 Formula f1 = (Formula) l.get(i);
-                // System.err.println(f1);
-                // System.err.println(auxiliary);
                 if (f1.equals(auxiliary.getSignedFormula().getFormula())) {
                     return true;
                 }

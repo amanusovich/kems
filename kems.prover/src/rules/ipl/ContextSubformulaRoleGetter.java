@@ -80,7 +80,6 @@ public class ContextSubformulaRoleGetter extends SubformulaRoleGetter {
             FormulaFactory ff, SignedFormulaList sfl, Formula f) {
 
     	List<Formula> l = f.getImmediateSubformulas();
-        //        System.out.println(f + " " + l);
 
         if (_role.equals(KERuleRole.OTHER)) {
             Formula auxFormula = sfl.get(1).getFormula();
@@ -96,11 +95,8 @@ public class ContextSubformulaRoleGetter extends SubformulaRoleGetter {
             }
 
         } else {
-            //            System.err.println("LR");
 
             Formula substitution = (Formula) _role.getFormulas(f).get(0);
-            //            System.out.println(substitution + " " + f + " " + sfl.get(0) + "
-            // " + substitute(sff, ff, sfl, f, substitution));
             return substitute(sff, ff, sfl, f, substitution);
         }
 

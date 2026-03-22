@@ -18,7 +18,6 @@ public class LessThanLabelCondition implements LabelCondition {
         
         // main.label <= aux.label (ci <= cj)
         boolean result = main.getLabel().lowerOrEqualThan(aux.getLabel());
-        System.out.println("DEBUG: LessThanLabelCondition - main label: " + main.getLabel() + ", aux label: " + aux.getLabel() + ", result: " + result);
         return result;
     }
 

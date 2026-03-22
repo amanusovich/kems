@@ -12,6 +12,7 @@ import logic.problem.Problem;
 import logic.signedFormulas.SignedFormulaCreator;
 import main.newstrategy.ISimpleStrategy;
 import main.newstrategy.Prover;
+import main.newstrategy.ipl.IPLTracer;
 import main.proofTree.IProofTree;
 import main.strategy.NullClosedProofTree;
 import main.tableau.Method;
@@ -124,6 +125,11 @@ public class ProverFacade {
 		if (logger.isDebugEnabled()) {
 			logger.debug("Starting proof procedure at "
 					+ new Time(System.currentTimeMillis()));
+		}
+
+		if (s instanceof main.newstrategy.ipl.IPLSimpleStrategy) {
+			IPLTracer.setEnabled(true);
+			IPLTracer.getInstance().reset();
 		}
 
 		long begin, interval = 0;

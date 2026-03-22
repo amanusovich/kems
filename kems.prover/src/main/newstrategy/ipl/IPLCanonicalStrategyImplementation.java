@@ -1,8 +1,6 @@
 package main.newstrategy.ipl;
 
 import java.util.LinkedList;
-import java.util.HashSet;
-import java.util.Set;
 
 import logic.formulas.CompositeFormula;
 import logic.formulas.Formula;
@@ -36,6 +34,8 @@ import logic.signedFormulas.SignedFormula;
  */
 public class IPLCanonicalStrategyImplementation {
     
+    private static final IPLTracer tracer = IPLTracer.getInstance();
+    
     private ISimpleStrategy strategy;
     private SignedFormulaBuilder sfb;
     private IPLOnePremiseRuleApplicator onePremiseApplicator;
@@ -61,7 +61,10 @@ public class IPLCanonicalStrategyImplementation {
         this.twoPremiseApplicator = (IPLTwoPremiseRuleApplicator) strategy.getRuleApplicators().get(1);
         this.pbApplicator = (IPLPBRuleApplicator) strategy.getProofTransformations().get(0);
         
-        System.out.println("\n🎯 IPL Canonical Algorithm: Starting execution");
+        if (IPLTracer.isEnabled()) {
+            tracer.reset();
+            tracer.logAlgorithmStart();
+        }
         
         // Line 1: T ← F A : c0 (already done in strategy initialization)
         ClassicalProofTree T = strategy.getProofTree();
@@ -82,8 +85,13 @@ public class IPLCanonicalStrategyImplementation {
             ClassicalProofTree b = (ClassicalProofTree) openBranches.removeFirst();
             strategy.setCurrent(b);
             
-            System.out.println("\n📋 Processing branch: " + getBranchId(b));
-            System.out.println("   Estado: closed=" + b.isClosed() + ", completed=" + b.isCompleted());
+            if (IPLTracer.isEnabled()) {
+                tracer.setCurrentBranch(getBranchId(b));
+                tracer.logBranchStart(getBranchId(b));
+            }
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("Estado: closed=" + b.isClosed() + ", completed=" + b.isCompleted());
+            }
             
             // Line 5: while b is neither closed nor completed do
             java.util.Set<SignedFormula> failedFormulas = new java.util.HashSet<>();
@@ -94,11 +102,15 @@ public class IPLCanonicalStrategyImplementation {
                 
                 if (phi == null) {
                     // No more formulas to analyze - try PB as last resort
-                    System.out.println("⏭️ No more formulas to analyze - trying PB as last resort");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("No more formulas to analyze - trying PB as last resort");
+                    }
                     boolean pbApplied = pbApplicator.apply(b, sfb);
                     
                     if (pbApplied) {
-                        System.out.println("✅ PB applied successfully");
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("PB applied as last resort");
+                        }
                         
                         // PB siempre crea ramas cuando se aplica exitosamente
                         // Add child branches to the list of open branches
@@ -108,14 +120,18 @@ public class IPLCanonicalStrategyImplementation {
                             ClassicalProofTree leftBranch = (ClassicalProofTree) b.getLeft();
                             if (!leftBranch.isClosed()) {
                                 openBranches.addLast(leftBranch);
-                                System.out.println("  ⬅️ Added left branch to queue");
+                                if (IPLTracer.isEnabled()) {
+                                    tracer.logInfo("Added left branch to queue");
+                                }
                             }
                         }
                         if (b.getRight() != null) {
                             ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
                             if (!rightBranch.isClosed()) {
                                 openBranches.addLast(rightBranch);
-                                System.out.println("  ➡️ Added right branch to queue");
+                                if (IPLTracer.isEnabled()) {
+                                    tracer.logInfo("Added right branch to queue");
+                                }
                             }
                         }
                         // Current branch now has children, stop processing it
@@ -123,12 +139,16 @@ public class IPLCanonicalStrategyImplementation {
                         // tienen sus propias copias de las fórmulas y las procesarán independientemente
                         break;
                     } else {
-                        System.out.println("⏭️ PB could not be applied - branch processing complete");
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("PB could not be applied - branch processing complete");
+                        }
                         break;
                     }
                 }
                 
-                System.out.println("\n🔍 Selected formula φ: " + phi);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logFormulaSelected(phi.toString(), "selected for processing");
+                }
                 
                 // Lines 7-20: Try to apply rules to this specific formula
                 boolean applied = processFormula(b, phi, sfb);
@@ -137,14 +157,11 @@ public class IPLCanonicalStrategyImplementation {
                     // Reset failed formulas on successful application
                     failedFormulas.clear();
                     
-                    // ✅ DESACTIVADO: Reactivación ya no es necesaria con monotonicidad retroactiva
-                    // La monotonicidad retroactiva propaga automáticamente las fórmulas T-signadas
-                    // cuando se crean nuevas etiquetas, eliminando la necesidad de reactivación
-                    // reactivateAnalyzedFormulas(b);
-                    
                     // Check if new branches were created (e.g., by PB rule)
                     if (b.getLeft() != null || b.getRight() != null) {
-                        System.out.println("🌳 Branching detected - adding child branches to process");
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("Branching detected - adding child branches");
+                        }
                         // Add child branches to the list of open branches
                         // Usar addLast para procesar en orden FIFO (breadth-first)
                         // Agregar primero izquierda, luego derecha para procesar izquierda primero
@@ -152,14 +169,18 @@ public class IPLCanonicalStrategyImplementation {
                             ClassicalProofTree leftBranch = (ClassicalProofTree) b.getLeft();
                             if (!leftBranch.isClosed()) {
                                 openBranches.addLast(leftBranch);
-                                System.out.println("  ⬅️ Added left branch to queue");
+                                if (IPLTracer.isEnabled()) {
+                                    tracer.logInfo("Added left branch to queue");
+                                }
                             }
                         }
                         if (b.getRight() != null) {
                             ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
                             if (!rightBranch.isClosed()) {
                                 openBranches.addLast(rightBranch);
-                                System.out.println("  ➡️ Added right branch to queue");
+                                if (IPLTracer.isEnabled()) {
+                                    tracer.logInfo("Added right branch to queue");
+                                }
                             }
                         }
                         // Current branch now has children, stop processing it
@@ -172,41 +193,51 @@ public class IPLCanonicalStrategyImplementation {
                     // Si hay demasiadas fórmulas fallidas, podría ser un loop
                     // Limitar el tamaño de failedFormulas para evitar loops infinitos
                     if (failedFormulas.size() > 50) {
-                        System.out.println("⚠️ Demasiadas fórmulas fallidas (" + failedFormulas.size() + ") - posible loop, intentando PB");
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("Too many failed formulas (" + failedFormulas.size() + ") - trying PB");
+                        }
                         // Intentar PB como último recurso antes de que el loop continúe
                         boolean pbApplied = pbApplicator.apply(b, sfb);
                         if (pbApplied) {
-                            System.out.println("✅ PB applied successfully (para evitar loop)");
+                            if (IPLTracer.isEnabled()) {
+                                tracer.logInfo("PB applied (loop prevention)");
+                            }
                             // Check if new branches were created
                             if (b.getLeft() != null || b.getRight() != null) {
-                                System.out.println("🌳 Branching detected after PB - adding child branches to process");
+                                if (IPLTracer.isEnabled()) {
+                                    tracer.logInfo("Branching detected after PB");
+                                }
                                 // Usar addLast para procesar en orden FIFO (breadth-first)
                                 // Agregar primero izquierda, luego derecha para procesar izquierda primero
                                 if (b.getLeft() != null) {
                                     ClassicalProofTree leftBranch = (ClassicalProofTree) b.getLeft();
                                     if (!leftBranch.isClosed()) {
                                         openBranches.addLast(leftBranch);
-                                        System.out.println("  ⬅️ Added left branch to queue");
+                                        if (IPLTracer.isEnabled()) {
+                                            tracer.logInfo("Added left branch to queue");
+                                        }
                                     }
                                 }
                                 if (b.getRight() != null) {
                                     ClassicalProofTree rightBranch = (ClassicalProofTree) b.getRight();
                                     if (!rightBranch.isClosed()) {
                                         openBranches.addLast(rightBranch);
-                                        System.out.println("  ➡️ Added right branch to queue");
+                                        if (IPLTracer.isEnabled()) {
+                                            tracer.logInfo("Added right branch to queue");
+                                        }
                                     }
                                 }
                                 break;
                             } else {
                                 // PB aplicado pero no creó ramas - resetear y continuar
                                 failedFormulas.clear();
-                                // ✅ DESACTIVADO: Reactivación ya no es necesaria con monotonicidad retroactiva
-                                // reactivateAnalyzedFormulas(b);
                                 continue;
                             }
                         } else {
                             // PB no se pudo aplicar - detener para evitar loop infinito
-                            System.out.println("⏭️ PB could not be applied - deteniendo procesamiento de esta rama para evitar loop");
+                            if (IPLTracer.isEnabled()) {
+                                tracer.logInfo("PB could not be applied - stopping branch to avoid loop");
+                            }
                             break;
                         }
                     }
@@ -216,7 +247,9 @@ public class IPLCanonicalStrategyImplementation {
                 // (closure checking is automatic in IPLProofTree)
                 
                 if (b.isClosed()) {
-                    System.out.println("🔴 Branch closed!");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logBranchCompleted(getBranchId(b), true);
+                    }
                     break;
                 }
             }
@@ -227,11 +260,15 @@ public class IPLCanonicalStrategyImplementation {
                 if (b.getLeft() == null && b.getRight() == null) {
                     b.setCompleted(true);
                     T.setOpenCompletedBranch(b);
-                    System.out.println("⚠️ Branch completed but not closed");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logBranchCompleted(getBranchId(b), false);
+                    }
                     // ✅ CORREGIDO: NO hacer break aquí, continuar con la siguiente rama en la cola
                     // break; // ❌ Esto salía del bucle externo y detenía el procesamiento
                 } else {
-                    System.out.println("✅ Branch has children - continuing with child branches");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("Branch has children - continuing with child branches");
+                    }
                 }
             } else {
                 if (!T.isClosed()) {
@@ -242,7 +279,9 @@ public class IPLCanonicalStrategyImplementation {
         
         // Line 23: end while (tree processing)
         // Line 24: return T
-        System.out.println("\n✅ IPL Canonical Algorithm: Execution complete");
+        if (IPLTracer.isEnabled()) {
+            tracer.logAlgorithmEnd(T.isClosed());
+        }
         return T;
     }
     
@@ -262,29 +301,15 @@ public class IPLCanonicalStrategyImplementation {
         SignedFormula firstOnePremiseCandidate = null;
         SignedFormula firstTwoPremiseCandidate = null;
         
-        String branchIdStr = "unknown";
-        if (b instanceof logicalSystems.ipl.IPLProofTree) {
-            branchIdStr = ((logicalSystems.ipl.IPLProofTree) b).getBranchId();
-        }
-        System.out.println("🔍 selectUnanalyzedFormula: Buscando fórmulas en rama " + branchIdStr);
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = b.getTopDownIterator();
-        
-        int totalNodes = 0;
-        int skippedAnalyzed = 0;
-        int skippedFailed = 0;
-        int skippedTopBottom = 0;
-        int skippedAtomic = 0;
-        int checkedComposite = 0;
         
         while (it.hasNext()) {
             INode node = it.next();
             if (node instanceof SignedFormulaNode) {
-                totalNodes++;
                 SignedFormulaNode sfNode = (SignedFormulaNode) node;
                 
                 // Skip already analyzed formulas
                 if (sfNode.getState() == SignedFormulaNodeState.ANALYSED) {
-                    skippedAnalyzed++;
                     continue;
                 }
                 
@@ -292,50 +317,43 @@ public class IPLCanonicalStrategyImplementation {
                 
                 // Skip formulas that failed in this round
                 if (failedFormulas.contains(sf)) {
-                    skippedFailed++;
                     continue;
                 }
                 
                 // Skip T⊤ and F⊥
                 if (isTopOrBottom(sf)) {
-                    skippedTopBottom++;
                     continue;
                 }
                 
                 // Skip atomic formulas (they cannot be analyzed)
                 if (!(sf.getFormula() instanceof CompositeFormula)) {
-                    skippedAtomic++;
                     continue;
                 }
-                
-                checkedComposite++;
-                System.out.println("  ✓ Fórmula compuesta encontrada: " + sf + " (estado: " + sfNode.getState() + ")");
                 
                 // Check if this formula has a 1-premise rule
                 if (firstOnePremiseCandidate == null && hasOnePremiseRule(sf)) {
                     firstOnePremiseCandidate = sf;
-                    System.out.println("  🎯 Candidato con regla de 1 premisa: " + sf);
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("1-premise candidate: " + sf);
+                    }
                     // Don't return yet - scan the entire tree to see if there are more
                 }
                 
                 // Save as candidate with 2-premise rule
                 if (firstTwoPremiseCandidate == null && hasTwoPremiseRule(sf)) {
                     firstTwoPremiseCandidate = sf;
-                    System.out.println("  🎯 Candidato con regla de 2 premisas: " + sf);
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("2-premise candidate: " + sf);
+                    }
                 }
             }
         }
         
-        System.out.println("🔍 selectUnanalyzedFormula: Total nodos=" + totalNodes + 
-                          ", analizadas=" + skippedAnalyzed + 
-                          ", fallidas=" + skippedFailed + 
-                          ", TOP/BOTTOM=" + skippedTopBottom + 
-                          ", atómicas=" + skippedAtomic + 
-                          ", compuestas=" + checkedComposite);
-        
         // Return 1-premise candidate if found, otherwise return 2-premise candidate
         if (firstOnePremiseCandidate != null) {
-            System.out.println("🎯 Prioritizing 1-premise formula: " + firstOnePremiseCandidate);
+            if (IPLTracer.isEnabled()) {
+                tracer.logFormulaSelected(firstOnePremiseCandidate.toString(), "1-premise priority");
+            }
             return firstOnePremiseCandidate;
         }
         
@@ -354,12 +372,10 @@ public class IPLCanonicalStrategyImplementation {
         Object ruleListObj = strategy.getMethod().getRules().get("onePremiseRules");
         
         if (ruleListObj == null) {
-            System.out.println("⚠️ DEBUG: onePremiseRules list is null");
             return false;
         }
         
         if (!(ruleListObj instanceof rules.structures.OnePremiseRuleList)) {
-            System.out.println("⚠️ DEBUG: onePremiseRules is not OnePremiseRuleList, it's: " + ruleListObj.getClass().getName());
             return false;
         }
         
@@ -367,7 +383,6 @@ public class IPLCanonicalStrategyImplementation {
         rules.Rule rule = ruleList.get(sf.getSign(), comp.getConnective());
         
         boolean hasRule = rule != null && rule != rules.NullRule.INSTANCE;
-        System.out.println("🔍 DEBUG hasOnePremiseRule for " + sf + ": " + hasRule + " (rule: " + rule + ")");
         
         return hasRule;
     }
@@ -409,22 +424,30 @@ public class IPLCanonicalStrategyImplementation {
         boolean isTPersistent = isTNotPersistent(phi);
         
         // Line 7-9: Try 1-premise rule FIRST
-        System.out.println("📌 Step 1: Trying 1-premise rules for: " + phi);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("Trying 1-premise rules for: " + phi);
+        }
         applied = onePremiseApplicator.applySingle(b, sfb, phi);
         
         if (applied) {
-            System.out.println("✅ 1-premise rule applied successfully");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("1-premise rule applied");
+            }
             // T¬ persistent formulas should NOT be marked as ANALYSED
             // (they already handle this internally in OnePremiseRuleApplicator)
             return true;
         }
         
         // Line 10-20: Try 2-premise rule SECOND
-        System.out.println("📌 Step 2: Trying 2-premise rules for: " + phi);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("Trying 2-premise rules for: " + phi);
+        }
         applied = twoPremiseApplicator.applySingle(b, sfb, phi);
         
         if (applied) {
-            System.out.println("✅ 2-premise rule applied successfully");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("2-premise rule applied");
+            }
             return true;
         }
         
@@ -434,10 +457,14 @@ public class IPLCanonicalStrategyImplementation {
         // If no rule was applied, mark as analyzed to avoid infinite loops
         // EXCEPT for T¬ persistent formulas (they should remain NOT_ANALYSED)
         if (!isTPersistent) {
-            System.out.println("⚠️ No applicable rule found for: " + phi + " - marking as ANALYSED");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("No applicable rule for " + phi + " - marking ANALYSED");
+            }
             markAsAnalyzed(b, phi);
         } else {
-            System.out.println("⚠️ No applicable rule found for T¬ persistent: " + phi + " - keeping NOT_ANALYSED");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("No applicable rule for T¬ persistent " + phi + " - keeping NOT_ANALYSED");
+            }
         }
         
         return false;
@@ -450,24 +477,6 @@ public class IPLCanonicalStrategyImplementation {
         SignedFormulaNode node = b.getNode(sf);
         if (node != null) {
             node.setState(SignedFormulaNodeState.ANALYSED);
-        }
-    }
-    
-    /**
-     * Reactivates all ANALYSED formulas in the branch by marking them as NOT_ANALYSED.
-     * This allows them to be reconsidered with newly added formulas.
-     * Exception: T¬ persistent formulas are never marked ANALYSED, so no action needed.
-     */
-    private void reactivateAnalyzedFormulas(ClassicalProofTree b) {
-        main.proofTree.iterator.IProofTreeVeryBasicIterator it = b.getTopDownIterator();
-        while (it.hasNext()) {
-            INode node = it.next();
-            if (node instanceof SignedFormulaNode) {
-                SignedFormulaNode sfNode = (SignedFormulaNode) node;
-                if (sfNode.getState() == SignedFormulaNodeState.ANALYSED) {
-                    sfNode.setState(SignedFormulaNodeState.NOT_ANALYSED);
-                }
-            }
         }
     }
     

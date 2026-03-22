@@ -624,6 +624,10 @@ public class ProverConfigurator extends JFrame implements ActionListener {
 				.setSelectedItem(RuleStructureFactory.CPL_CONFIGURABLE);
 	}
 
+	public boolean isIPL() {
+		return IPL_LOGIC.equals(logicNameCombo.getSelectedItem());
+	}
+
 	private void setIPLAsCurrentLogicOption() {
 		parsingLibNameCombo.setModel(new DefaultComboBoxModel(new String[] {
 				IPL_PARSER }));

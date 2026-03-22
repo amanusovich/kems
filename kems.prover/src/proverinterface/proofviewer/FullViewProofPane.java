@@ -19,6 +19,7 @@ import main.proofTree.IProofTree;
 import main.proofTree.Node;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.iterator.IProofTreeBasicIterator;
+import main.proofTree.origin.SignedFormulaNodeOrigin;
 import main.strategy.IClassicalProofTree;
 import main.tableau.IProof;
 import main.tableau.verifier.ExtendedNode;
@@ -233,17 +234,24 @@ public class FullViewProofPane extends JPanel {
 			}
 
 			Node n = (Node) it.next();
+			SignedFormulaNode sfn = (SignedFormulaNode) n;
 			String s = proofViewer.isOriginEnabled() ? n.toString()
-					: ((SignedFormulaNode) n).getContent().toString();
+					: sfn.getContent().toString();
 
 			ExtendedNode en = (ExtendedNode) n;
 
-			if (showNumbers && en.getOrigin().getRule() != ClassicalRules.CLOSE) {
+			if (showNumbers && (en.getOrigin() == null || en.getOrigin().getRule() != ClassicalRules.CLOSE)) {
 				s = formulaIndex++ + " " + s;
 			}
 
 			if (showMarkUsed && en.getUsed() == Boolean.TRUE) {
 				s = "* " + s;
+			}
+
+			Color savedColor = g.getColor();
+			if (proofViewer instanceof IPLProofViewer && sfn.getOrigin() instanceof SignedFormulaNodeOrigin) {
+				String ruleName = ((SignedFormulaNodeOrigin) sfn.getOrigin()).getRule().toString();
+				g.setColor(IPLColorScheme.getColor(ruleName));
 			}
 
 			List<Double> result = null;
@@ -253,6 +261,7 @@ public class FullViewProofPane extends JPanel {
 				result = drawString(s, drawingY, x, y, spaceBetweenLines,
 						index, g);
 			}
+			g.setColor(savedColor);
 			drawingY = result.get(0).doubleValue();
 			index = result.get(1).intValue();
 		}
@@ -300,7 +309,7 @@ public class FullViewProofPane extends JPanel {
 		int x1 = (int) x - (proofViewer.getCirclesRadius() / 2);
 		int y1 = (int) drawingY - (proofViewer.getCirclesRadius() / 2);
 
-		if (en.getOrigin().getRule() != ClassicalRules.CLOSE) {
+		if (en.getOrigin() == null || en.getOrigin().getRule() != ClassicalRules.CLOSE) {
 			if ((showMarkUsed && en.getUsed() == Boolean.TRUE) || !showMarkUsed) {
 				g.fillOval(x1, y1, proofViewer.getCirclesRadius(), proofViewer
 						.getCirclesRadius());

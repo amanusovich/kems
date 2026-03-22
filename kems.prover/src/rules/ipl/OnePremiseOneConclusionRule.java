@@ -48,7 +48,6 @@ public class OnePremiseOneConclusionRule extends OneConclusionIPLRule {
 			LabelledFormula lf = getConclusion().getLabelledFormula(lff, ff, lfl);
 			return new SignedFormulaList(lf);
 		} else {
-            System.err.println(this+ " null for " + lfl);
 			return null;
 		}
 	}

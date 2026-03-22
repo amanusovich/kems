@@ -126,36 +126,22 @@ public class IPLSignedFormulaFactory extends LabelledFormulaFactory {
      */
     @Override
     public void cloneAll(SignedFormulaFactory sourceFactory, FormulaFactory ff) {
-        System.out.println("🔄 IPL cloneAll: Iniciando conversión de " + sourceFactory.getSize() + " fórmulas");
-        
         // Obtener todas las claves de las fórmulas en la factory origen
         Set<String> keys = sourceFactory.getSignedFormulas().keySet();
         List<String> keyList = new ArrayList<String>(keys);
-        
-        int convertedCount = 0;
-        int skippedCount = 0;
-        
+
         for (String key : keyList) {
             // Verificar si ya existe en nuestra factory
             if (!this.getSignedFormulas().containsKey(key)) {
                 SignedFormula originalFormula = sourceFactory.getSignedFormulas().get(key);
-                
+
                 // Convertir a IPL con ContextFormulaLabel
                 LabelledFormula iplFormula = convertToIPLFormula(originalFormula, ff);
-                
+
                 // Agregar a nuestra factory
                 this.getSignedFormulas().put(key, iplFormula);
-                
-                convertedCount++;
-                System.out.println("✅ IPL cloneAll: " + key + " → " + iplFormula.getLabel().getClass().getSimpleName());
-            } else {
-                skippedCount++;
-                System.out.println("⏭️  IPL cloneAll: Saltando " + key + " (ya existe)");
             }
         }
-        
-        System.out.println("🎯 IPL cloneAll: Convertidas " + convertedCount + " fórmulas, saltadas " + skippedCount);
-        System.out.println("📊 IPL cloneAll: Context ahora tiene " + context.getLabels().size() + " etiquetas");
     }
     
     /**
@@ -180,7 +166,6 @@ public class IPLSignedFormulaFactory extends LabelledFormulaFactory {
         // Registrar en el Context
         if (!context.getLabels().contains(contextLabel)) {
             context.addElement(contextLabel);
-            System.out.println("🏷️  IPL cloneAll: Nueva etiqueta " + contextLabel + " agregada al Context");
         }
         
         // Clonar la fórmula usando FormulaFactory

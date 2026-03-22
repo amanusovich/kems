@@ -31,7 +31,7 @@ public class OnePremiseTwoConclusionsLabelOverrideRule extends OnePremiseTwoConc
     		KELabelledAction conclusion1,
     		KELabelledAction conclusion2,
     		LabelGetter labelGetter) {
-    	super(name, premise, conclusion2, conclusion2);
+    	super(name, premise, conclusion1, conclusion2);
         _premise = premise;
         _conclusion1 = conclusion1;
         _conclusion2 = conclusion2;

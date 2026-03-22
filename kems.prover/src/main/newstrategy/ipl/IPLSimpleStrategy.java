@@ -95,14 +95,16 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
      */
     @Override
     public ProofTree close(Problem p) {
-        System.out.println("\n🎯 IPL: Using Canonical Algorithm Implementation (following paper)");
+        if (IPLTracer.isEnabled()) {
+            IPLTracer.getInstance().logInfo("IPL: Using Canonical Algorithm Implementation (following paper)");
+        }
         
         // Call parent's close method to initialize everything properly
         // But we'll use our own implementation instead of SimpleStrategyImplementation
         
-        // Initialize signed formula builder and proof tree (copied from parent)
         SignedFormulaBuilder sfb = new SignedFormulaBuilder(
             p.getSignedFormulaFactory(), p.getFormulaFactory());
+        setSignedFormulaBuilder(sfb);
         
         ClassicalProofTree proofTree = (ClassicalProofTree) createProofTree(p, sfb);
         setProofTree(proofTree);

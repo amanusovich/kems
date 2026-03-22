@@ -32,16 +32,13 @@ public class NewLabelGetter extends LabelGetter {
 	public FormulaLabel getLabel(SignedFormulaList lfl) {
 		//if (this.computedLabel != null)
 		//    return this.computedLabel;
-			if (lfl.get(0).getLabel() instanceof ContextFormulaLabel) {
-			System.out.println("DEBUG: ContextFormulaLabel foundXX");
-			}
-
-		if (this.getterType == "MAIN") {
+	
+		if ("MAIN".equals(this.getterType)) {
 			this.computedLabel = lfl.get(0).getLabel().getGreaterFormulaLabel();
 			return this.computedLabel;
-		} else if (this.getterType == "AUX") {
+		} else if ("AUX".equals(this.getterType)) {
 			return lfl.get(1).getLabel().getGreaterFormulaLabel();
-		} else if (this.getterType == "GLOBAL_NEW") {
+		} else if ("GLOBAL_NEW".equals(this.getterType)) {
 			// Generar una nueva etiqueta mayor que TODAS las existentes en el contexto
 			FormulaLabel anyLabel = lfl.get(0).getLabel();
 			if (anyLabel instanceof ContextFormulaLabel) {
@@ -58,7 +55,7 @@ public class NewLabelGetter extends LabelGetter {
 				// Generar una nueva etiqueta mayor que todas
 				return newContext.getNewFormulaLabelGreaterThanCollection(newContext.getLabels());
 			}
-		} else if (this.getterType == "BOTH") {
+		} else if ("BOTH".equals(this.getterType)) {
 			// map labelled formula list to a collection of formula labels
 			List<FormulaLabel> labels = lfl.getList().stream().map(lf -> lf.getLabel()).collect(Collectors.toList());
 			

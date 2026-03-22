@@ -24,6 +24,7 @@ import main.proofTree.SignedFormulaNodeState;
 import main.proofTree.iterator.IProofTreeVeryBasicIterator;
 import main.proofTree.origin.IOrigin;
 import main.strategy.memorySaver.OptimizedClassicalProofTree;
+import main.newstrategy.ipl.IPLTracer;
 
 /**
  * ProofTree específico para IPL que implementa:
@@ -40,7 +41,9 @@ import main.strategy.memorySaver.OptimizedClassicalProofTree;
  * ramas descendientes repitan aplicaciones de ancestros.
  */
 public class IPLProofTree extends OptimizedClassicalProofTree {
-    
+
+    private static final IPLTracer tracer = IPLTracer.getInstance();
+
     /**
      * Registro de instancias de reglas operacionales aplicadas POR RAMA (rinstances).
      * Similar a pbRinstancesByBranch, tracking por grupo de accesibilidad.
@@ -172,7 +175,9 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     public void registerRuleInstance(String ruleInstance) {
         Set<String> branchRinstances = rinstancesByBranch.computeIfAbsent(branchId, k -> new HashSet<>());
         branchRinstances.add(ruleInstance);
-        System.out.println("📝 Registrado en rinstances (rama " + branchId + "): " + ruleInstance);
+        if (IPLTracer.isEnabled()) {
+            tracer.logRinstanceRegistered(ruleInstance);
+        }
     }
     
     /**
@@ -238,7 +243,9 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     public void registerPBRuleInstance(String pbInstance, String targetBranchId) {
         Set<String> branchPbRinstances = pbRinstancesByBranch.computeIfAbsent(targetBranchId, k -> new HashSet<>());
         branchPbRinstances.add(pbInstance);
-        System.out.println("📝 Registrado PB en rinstances (rama " + targetBranchId + "): " + pbInstance);
+        if (IPLTracer.isEnabled()) {
+            tracer.logRinstanceRegistered("PB:" + pbInstance);
+        }
     }
     
     /**
@@ -260,7 +267,9 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
             String labelKey = label.toString();
             if (!sharedLabelBranchMap.containsKey(labelKey)) {
                 sharedLabelBranchMap.put(labelKey, branchId);
-                System.out.println("🏷️  Etiqueta " + labelKey + " registrada en rama " + branchId);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logLabelRegistered(labelKey, branchId);
+                }
                 return true; // Etiqueta nueva
             }
         }
@@ -381,13 +390,11 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         SignedFormula sf = (SignedFormula) aNode.getContent();
         getFsmm().put(sf.getFormula(), sf.getSign());
         
-        // Debug: verificar tipo de etiqueta
-        FormulaLabel label = sf.getLabel();
-        System.out.println("🔄 IPL updateMultimap: " + sf + " (label type: " + label.getClass().getSimpleName() + ")");
-        
         // Verificar reglas de cierre IPL
         if (detectIPLContradiction(aNode)) {
-            System.out.println("🔴 IPL: CONTRADICTION DETECTED for " + sf);
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("CONTRADICTION DETECTED for " + sf);
+            }
             setClosingReason(sf);
             setLocallyClosed(true);
         }
@@ -406,33 +413,17 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         Formula newFormula = newSf.getFormula();
         FormulaSign newSign = newSf.getSign();
         
-        System.out.println("🔍 IPL Closure (b*): Checking " + newSign + " " + newFormula + " " + newLabel);
-        
         // Obtener el Context para verificar relaciones de orden
         Context context = getContextFromLabel(newLabel);
         if (context == null) {
-            System.out.println("⚠️ IPL Closure: No Context found for label " + newLabel);
             return false; // Sin Context, no podemos verificar relaciones de orden
         }
         
-        System.out.println("🔍 IPL Closure: Context has " + context.getLabels().size() + " labels: " + context.getLabels());
-        
         // ✅ Calcular b* (extensión de la rama)
         Set<SignedFormula> bStar = extendBranch();
-        System.out.println("🔍 IPL Closure: b* contiene " + bStar.size() + " fórmulas (b tiene " + countFormulasInB() + ")");
-        System.out.println("🔍 IPL Closure (DEBUG-SIGN): newSign = " + newSign + " (class: " + (newSign != null ? newSign.getClass().getName() : "null") + ")");
-        System.out.println("🔍 IPL Closure (DEBUG-SIGN): IPLSigns.TRUE = " + IPLSigns.TRUE + " (identity: " + System.identityHashCode(IPLSigns.TRUE) + ")");
-        System.out.println("🔍 IPL Closure (DEBUG-SIGN): IPLSigns.FALSE = " + IPLSigns.FALSE + " (identity: " + System.identityHashCode(IPLSigns.FALSE) + ")");
-        if (newSign != null) {
-            System.out.println("🔍 IPL Closure (DEBUG-SIGN): newSign identity = " + System.identityHashCode(newSign));
-            System.out.println("🔍 IPL Closure (DEBUG-SIGN): newSign == IPLSigns.TRUE? " + (newSign == IPLSigns.TRUE));
-            System.out.println("🔍 IPL Closure (DEBUG-SIGN): newSign == IPLSigns.FALSE? " + (newSign == IPLSigns.FALSE));
-        }
         
         // Regla 1: T A: ci, F A: cj, ci ⪯ cj → ×
         if (newSign.equals(IPLSigns.TRUE)) {
-            System.out.println("🔍 IPL Closure: ENTERED TRUE block");
-
             // Buscar todas las instancias de F A en b*
             List<SignedFormula> oppositeFormulas = bStar.stream()
                 .filter(sf -> sf.getSign().equals(IPLSigns.FALSE) && 
@@ -441,11 +432,8 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                 .collect(java.util.stream.Collectors.toList());
                 
             if (!oppositeFormulas.isEmpty()) {
-                System.out.println("🔍 IPL Closure: Encontradas " + oppositeFormulas.size() + " instancias de F " + newFormula + " en b*");
-                
                 boolean newLabelAccessible = isLabelAccessible(newLabel);
                 if (!newLabelAccessible) {
-                    System.out.println("⚠️ IPL Closure: Etiqueta " + newLabel + " NO es accesible en rama " + this.branchId + ", ignorando");
                     return false;
                 }
                 
@@ -460,37 +448,20 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                     
                     // Verificar si ci ⪯ cj (newLabel ⪯ oppositeLabel)
                     boolean isLowerOrEqualResult = isLowerOrEqual(context, newLabel, oppositeLabel);
-                    System.out.println("🔍 IPL Closure: Verificando " + newLabel + " ⪯ " + oppositeLabel + 
-                                     " - resultado: " + isLowerOrEqualResult);
                     if (isLowerOrEqualResult) {
-                        System.out.println("🔴 IPL Closure Rule 1 (b*): T " + newFormula + " " + newLabel + 
-                                         ", F " + newFormula + " " + oppositeLabel + 
-                                         " with " + newLabel + " ⪯ " + oppositeLabel);
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logClosure(newFormula + " " + newLabel,
+                                    newFormula + " " + oppositeLabel,
+                                    newLabel + " ⪯ " + oppositeLabel);
+                        }
                         return true;
                     }
                 }
-                System.out.println("❌ IPL Closure: Ninguna instancia de F " + newFormula + " en b* cumple " + newLabel + " ⪯ cj");
-            } else {
-                System.out.println("🔍 IPL Closure: No se encontró F " + newFormula + " en b*");
             }
         }
         
         if (newSign.equals(IPLSigns.FALSE)) {
-            System.out.println("🔍 IPL Closure: ENTERED FALSE block");
             // Buscar todas las instancias de T A en b*
-            System.out.println("🔍 IPL Closure (DEBUG): newFormula = " + newFormula + " (" + newFormula.getClass().getName() + ")");
-            System.out.println("🔍 IPL Closure (DEBUG): bStar tiene " + bStar.size() + " fórmulas:");
-            int debugCount = 0;
-            for (SignedFormula sfDebug : bStar) {
-                if (sfDebug.getSign().equals(IPLSigns.TRUE) && sfDebug instanceof LabelledFormula) {
-                    System.out.println("  [" + (debugCount++) + "] " + sfDebug + " (formula: " + sfDebug.getFormula() + ", equals? " + sfDebug.getFormula().equals(newFormula) + ")");
-                    if (debugCount > 15) {
-                        System.out.println("  ... (más fórmulas)");
-                        break;
-                    }
-                }
-            }
-            
             List<SignedFormula> oppositeFormulas = bStar.stream()
                 .filter(sf -> sf.getSign().equals(IPLSigns.TRUE) && 
                              sf.getFormula().equals(newFormula) &&
@@ -498,11 +469,8 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                 .collect(java.util.stream.Collectors.toList());
                 
             if (!oppositeFormulas.isEmpty()) {
-                System.out.println("🔍 IPL Closure: Encontradas " + oppositeFormulas.size() + " instancias de T " + newFormula + " en b*");
-                
                 boolean newLabelAccessible = isLabelAccessible(newLabel);
                 if (!newLabelAccessible) {
-                    System.out.println("⚠️ IPL Closure: Etiqueta " + newLabel + " NO es accesible en rama " + this.branchId + ", ignorando");
                     return false;
                 }
                 
@@ -517,38 +485,20 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                     
                     // Verificar si ci ⪯ cj (oppositeLabel ⪯ newLabel)
                     boolean isLowerOrEqualResult = isLowerOrEqual(context, oppositeLabel, newLabel);
-                    System.out.println("🔍 IPL Closure: Verificando " + oppositeLabel + " ⪯ " + newLabel + 
-                                     " - resultado: " + isLowerOrEqualResult);
                     if (isLowerOrEqualResult) {
-                        System.out.println("🔴 IPL Closure Rule 1 (b*): T " + newFormula + " " + oppositeLabel + 
-                                         ", F " + newFormula + " " + newLabel + 
-                                         " with " + oppositeLabel + " ⪯ " + newLabel);
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logClosure(newFormula + " " + oppositeLabel,
+                                    newFormula + " " + newLabel,
+                                    oppositeLabel + " ⪯ " + newLabel);
+                        }
                         return true;
                     }
                 }
-                System.out.println("❌ IPL Closure: Ninguna instancia de T " + newFormula + " en b* cumple ci ⪯ " + newLabel);
-            } else {
-                System.out.println("🔍 IPL Closure: No se encontró T " + newFormula + " en b*");
             }
         }
         
         
         return false;
-    }
-    
-    /**
-     * Cuenta cuántas fórmulas hay físicamente en b (no en b*)
-     */
-    private int countFormulasInB() {
-        int count = 0;
-        IProofTreeVeryBasicIterator it = this.getTopDownIterator();
-        while (it.hasNext()) {
-            INode node = it.next();
-            if (node instanceof SignedFormulaNode) {
-                count++;
-            }
-        }
-        return count;
     }
     
     /**
@@ -604,7 +554,6 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     private List<SignedFormula> findAllFormulasWithSign(Formula formula, Object sign) {
         List<SignedFormula> results = new ArrayList<>();
         IProofTreeVeryBasicIterator it = this.getTopDownIterator();
-        int count = 0;
         while (it.hasNext()) {
             INode node = it.next();
             if (node instanceof SignedFormulaNode) {
@@ -619,15 +568,8 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                 
                 if (signMatches && formulaMatches) {
                     results.add(sf);
-                    if (count < 5) {
-                        System.out.println("  ✅ DEBUG: Encontrado " + sf);
-                    }
                 }
-                count++;
             }
-        }
-        if (results.isEmpty()) {
-            System.out.println("  ❌ DEBUG: No encontrado después de revisar " + count + " nodos");
         }
         return results;
     }

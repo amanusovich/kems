@@ -95,16 +95,12 @@ public class IPLRuleStructures {
         
         // NOTA: F A∧B y T A∨B NO tienen reglas operacionales en el nuevo conjunto,
         // pero PB se maneja dinámicamente en IPLPBRuleApplicator sin necesidad de registro aquí.
-        
-        System.out.println("DEBUG: PB rules initialized for T→ only");
-        
+
         return PBRules;
     }
 
     private IPLConnectiveRoleSignRuleList initializeTwoPremiseRuleList() {
         twoPremiseRules = new IPLConnectiveRoleSignRuleList();
-
-        System.out.println("DEBUG: Initializing two-premise rules (with PB-assisted rules)...");
 
         // Reglas que usan PB cuando falta premisa menor:
         
@@ -139,9 +135,7 @@ public class IPLRuleStructures {
         // (T∨₂) - T A∨B : ci, F B : cj, ci ⪯ cj → T A : ci
         addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.RIGHT,
                 IPLSigns.TRUE, IPLRules.T_OR_F_RIGHT);
-        
-        System.out.println("DEBUG: Two-premise rules initialized");
-        
+
         return twoPremiseRules;
     }
 
@@ -185,14 +179,9 @@ public class IPLRuleStructures {
 
     protected void addToTwoPremiseRules(Connective conn, KERuleRole role,
             FormulaSign sign, TwoPremisesOneConclusionRule r) {
-        System.out.println("DEBUG: addToTwoPremiseRules called with: " + conn + ", " + role + ", " + sign + ", " + r);
         if (signature.contains(conn)) {
-            System.out.println("DEBUG: Signature contains connective, adding rule...");
             addConnectiveRuleType(conn, r, RuleType.SUBSTITUTION_2P);
             twoPremiseRules.add(conn, role, sign, r);
-            System.out.println("DEBUG: Rule added. TwoPremiseRules size: " + twoPremiseRules.size());
-        } else {
-            System.out.println("DEBUG: Signature does NOT contain connective: " + conn);
         }
     }
 

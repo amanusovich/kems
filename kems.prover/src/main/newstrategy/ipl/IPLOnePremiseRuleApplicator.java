@@ -13,7 +13,6 @@ import logic.formulas.CompositeFormula;
 import logic.formulas.Formula;
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.SignedFormulaBuilder;
-import logic.signedFormulas.SignedFormulaFactory;
 import logic.labelledFormulas.Context;
 import logic.labelledFormulas.ContextFormulaLabel;
 import logic.labelledFormulas.FormulaLabel;
@@ -23,11 +22,11 @@ import logicalSystems.ipl.IPLConnectives;
 import logicalSystems.ipl.IPLProofTree;
 import logicalSystems.ipl.IPLRules;
 import logicalSystems.ipl.IPLSigns;
-import logic.labelledFormulas.LabelledFormulaFactory;
 import main.newstrategy.ISimpleStrategy;
 import main.proofTree.INode;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.SignedFormulaNodeState;
+import main.proofTree.origin.NamedOrigin;
 import main.proofTree.iterator.IProofTreeVeryBasicIterator;
 import main.strategy.ClassicalProofTree;
 import main.strategy.applicator.IRuleApplicator;
@@ -43,6 +42,8 @@ import rules.structures.OnePremiseRuleList;
  * 
  */
 public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
+
+    private static final IPLTracer tracer = IPLTracer.getInstance();
 
     private ISimpleStrategy strategy;
 
@@ -76,7 +77,6 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
 
             SignedFormula sf = (SignedFormula) proofTree.getPBCandidates().get(i);
 
-            // System.err.println(sf);
             if (chooseAndApplyOnePremiseRule(proofTree, sfb, sf)) {
                 hasApplied = true;
                 i--;
@@ -106,8 +106,6 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         // Rule r = chooseOnePremiseRule(proofTree, sf);
         List<Rule> rules = getOnePremiseRuleList(proofTree, sf);
 
-        System.out.println("hey");
-
         for (Iterator<Rule> it = rules.iterator(); it.hasNext();) {
             if (hasApplied)
                 break;
@@ -117,14 +115,20 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
             // PROVISO DE TERMINACIÓN para regla F→
             // NO aplicar (F→) si existe T A : ch donde ch ≤ ci
             if (r == IPLRules.F_A_IMPLIES_B_TA_FB && shouldBlockFImpliesRule(proofTree, sf)) {
-                System.out.println("🛑 Proviso de Terminación: Bloqueando aplicación de F→ para " + sf);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logRuleBlocked("F_IMPLIES", sf.toString(),
+                            "Proviso: T A : ch exists where ch ≤ ci");
+                }
                 continue; // Saltar esta regla, no aplicarla
             }
             
             // PROVISO DE SATURACIÓN para regla F¬ (existencial)
             // NO aplicar (F¬) si existe T A : ch donde ci ≤ ch (la fórmula ya está satisfecha)
             if (r == IPLRules.F_NOT && shouldBlockFNotRule(proofTree, sf)) {
-                System.out.println("🛑 Proviso de Saturación: Bloqueando aplicación de F¬ para " + sf);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logRuleBlocked("F_NOT", sf.toString(),
+                            "Saturation proviso: T A : ch exists where ci ≤ ch");
+                }
                 continue; // Saltar esta regla, no aplicarla
             }
 
@@ -141,12 +145,17 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 String baseRuleInstance = r.toString() + ":" + sf.toString();
                 
                 if (iplTree.wasRuleInstanceApplied(baseRuleInstance)) {
-                    System.out.println("⏭️ Regla de 1 premisa ya aplicada a esta fórmula: " + baseRuleInstance);
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logRuleBlocked(r.toString(), sf.toString(),
+                                "rinstance exists: " + baseRuleInstance);
+                    }
                     continue;
                 }
                 // Registrar que intentamos aplicar esta regla a esta fórmula
                 iplTree.registerRuleInstance(baseRuleInstance);
-                System.out.println("📝 Registrado intento de regla de 1 premisa: " + baseRuleInstance);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logRinstanceRegistered(baseRuleInstance);
+                }
             }
             
             SignedFormulaList sfl;
@@ -154,7 +163,10 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
             if (isTNot) {
                 // T¬ es persistente: generar todas las conclusiones para etiquetas actuales
                 sfl = generateAllTNotConclusions(proofTree, sfb, sf, r);
-                System.out.println("🔄 T¬ persistente: Evaluando " + sfl.size() + " conclusiones para todas las etiquetas mayores");
+                if (IPLTracer.isEnabled()) {
+                    tracer.logInfo("T¬ persistent: evaluating " + sfl.size()
+                            + " conclusions for all greater labels");
+                }
                 
                 // Si TODAS ya existen, no hacer nada (pero NO marcar como ANALYSED)
                 int existingCount = 0;
@@ -165,7 +177,9 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 }
                 
                 if (existingCount == sfl.size() && sfl.size() > 0) {
-                    System.out.println("⏭️ T¬: Todas las conclusiones ya existen para etiquetas actuales, saltando");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("T¬: all conclusions already exist, skipping");
+                    }
                     continue; // Saltar esta regla, pero NO marcarla como ANALYSED
                 }
             } else {
@@ -184,7 +198,9 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                     
                     // Evitar duplicados
                     if (proofTree.getNode(newFormula) != null) {
-                        System.out.println("⏭️ Conclusión ya existe: " + newFormula);
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("Conclusion already exists: " + newFormula);
+                        }
                         continue;
                     }
                     
@@ -193,14 +209,18 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                     if (isTNot && proofTree instanceof IPLProofTree) {
                         IPLProofTree iplTree = (IPLProofTree) proofTree;
                         String ruleInstance = createRuleInstanceKey(r.toString(), sf, newFormula);
-                        System.out.println("DEBUG: Checking one-premise rinstance: " + ruleInstance);
                         if (iplTree.wasRuleInstanceApplied(ruleInstance)) {
-                            System.out.println("⏭️ Instancia de regla T¬ ya aplicada (rinstances): " + ruleInstance);
+                            if (IPLTracer.isEnabled()) {
+                                tracer.logRuleBlocked("T_NOT", sf.toString(),
+                                        "T¬ rinstance exists: " + ruleInstance);
+                            }
                             continue; // No aplicar, ya fue aplicada
                         }
                         // Registrar la instancia de regla
                         iplTree.registerRuleInstance(ruleInstance);
-                        System.out.println("📝 Registrado rinstance (T¬): " + ruleInstance);
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logRinstanceRegistered(ruleInstance);
+                        }
                     }
                     
                     // Usar SignedFormulaNode para compatibilidad con ClassicalProofTree
@@ -208,17 +228,18 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                     proofTree.addLast(new SignedFormulaNode(newFormula, SignedFormulaNodeState.NOT_ANALYSED,
                             strategy.createOrigin(r, proofTree.getNode(sf), null)));
                     
-                    // Debug: Verificar si la fórmula tiene etiqueta
                     if (newFormula instanceof LabelledFormula) {
                         LabelledFormula lf = (LabelledFormula) newFormula;
-                        System.out.println("✅ IPL: Fórmula con etiqueta creada: " + lf.toString());
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logRuleApplied(r.toString(), sf.toString(), lf.toString());
+                        }
                         
-                        // ✅ PROPAGACIÓN FÍSICA DE MONOTONICIDAD para F→
-                        // Cuando F→ crea un nuevo label cj, debemos agregar físicamente
-                        // todas las fórmulas T compuestas que se propagan desde ci ≤ cj
-                        // Esto permite que las reglas de 2 premisas se apliquen correctamente
-                        if (r == IPLRules.F_A_IMPLIES_B_TA_FB) {
-                            propagateCompositeTFormulasForNewLabel(proofTree, lf.getLabel(), strategy);
+                        // When F→₁ or F¬ creates a new label cj, propagate T-composite formulas
+                        // from ancestor labels ci (ci ≤ cj) to cj by Kripke monotonicity.
+                        // This materializes b* formulas so one-premise rules (e.g. T∧) can apply
+                        // at the new label with fresh rinstances (Definition 5.3, Theorem 5.11).
+                        if (r == IPLRules.F_A_IMPLIES_B_TA_FB || r == IPLRules.F_NOT) {
+                            propagateCompositeTFormulasForNewLabel(proofTree, lf.getLabel());
                         }
                     }
                     
@@ -275,8 +296,6 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         
         // Verificar que sea realmente un IPLOnePremiseRuleList
         if (!(ruleListObject instanceof IPLOnePremiseRuleList)) {
-            System.err.println("Error: Expected IPLOnePremiseRuleList but got " + 
-                             (ruleListObject != null ? ruleListObject.getClass().getName() : "null"));
             return new ArrayList<Rule>();
         }
         
@@ -328,18 +347,13 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         
         Context context = getContextFromLabel(ciLabel);
         if (context == null) {
-            System.out.println("⚠️ Proviso: No se pudo obtener Context para verificar");
             return false; // Sin Context, no podemos verificar, no bloquear por seguridad
         }
         
         // ✅ EXTENSIÓN b* IMPLÍCITA: Buscar en b* (no solo en b)
         // Según el paper: "F → is applicable only when T A : ch does not occur 
         // for any ch ⪯ ci in the branch" - esto incluye fórmulas en b*
-        System.out.println("🔍 Proviso (b*): Context tiene " + context.getLabels().size() + " etiquetas: " + context.getLabels());
-        System.out.println("🔍 Proviso (b*): Verificando si existe T " + aFormula + " : ch donde ch ≤ " + ciLabel + " en b*");
-        
         if (!(proofTree instanceof IPLProofTree)) {
-            System.out.println("⚠️ Proviso: ProofTree no es IPLProofTree, usando búsqueda en b solamente");
             return false; // Fallback: no bloquear
         }
         
@@ -366,14 +380,19 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 boolean chLowerOrEqualCI = context.isLowerOrEqualTo(chLabel, ciLabel);
                 
                 if (chEqualsCI || chLowerOrEqualCI) {
-                    System.out.println("🛑 Proviso (b*): Encontrado T " + aFormula + " : " + chLabel + 
-                                     " donde " + chLabel + " ≤ " + ciLabel);
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logRuleBlocked("F_IMPLIES", sf.toString(),
+                                "Proviso (b*): found T " + aFormula + " : " + chLabel + " where "
+                                        + chLabel + " ≤ " + ciLabel);
+                    }
                     return true; // BLOQUEAR la aplicación de F→
                 }
             }
         }
         
-        System.out.println("✅ Proviso (b*): No se encontró T " + aFormula + " : ch donde ch ≤ " + ciLabel);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("Proviso (b*): no T " + aFormula + " : ch where ch ≤ " + ciLabel + " found");
+        }
         return false; // No bloquear
     }
     
@@ -419,17 +438,12 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         
         Context context = getContextFromLabel(ciLabel);
         if (context == null) {
-            System.out.println("⚠️ Proviso F¬: No se pudo obtener Context para verificar");
             return false; // Sin Context, no podemos verificar, no bloquear por seguridad
         }
         
         // ✅ EXTENSIÓN b* IMPLÍCITA: Buscar en b* (no solo en b)
         // Según Definition 5.6: F !A : ci está saturada si existe T A : ch donde ci ≤ ch en b*
-        System.out.println("🔍 Proviso F¬ (b*): Context tiene " + context.getLabels().size() + " etiquetas: " + context.getLabels());
-        System.out.println("🔍 Proviso F¬ (b*): Verificando si existe T " + aFormula + " : ch donde " + ciLabel + " ≤ ch en b*");
-        
         if (!(proofTree instanceof IPLProofTree)) {
-            System.out.println("⚠️ Proviso F¬: ProofTree no es IPLProofTree");
             return false; // Fallback: no bloquear
         }
         
@@ -456,14 +470,20 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 boolean ciLowerOrEqualCH = context.isLowerOrEqualTo(ciLabel, chLabel);
                 
                 if (chEqualsCI || ciLowerOrEqualCH) {
-                    System.out.println("🛑 Proviso F¬ (b*): Encontrado T " + aFormula + " : " + chLabel + 
-                                     " donde " + ciLabel + " ≤ " + chLabel + " - Fórmula saturada");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logRuleBlocked("F_NOT", sf.toString(),
+                                "Saturation (b*): found T " + aFormula + " : " + chLabel + " where "
+                                        + ciLabel + " ≤ " + chLabel);
+                    }
                     return true; // BLOQUEAR la aplicación de F¬
                 }
             }
         }
         
-        System.out.println("✅ Proviso F¬ (b*): No se encontró T " + aFormula + " : ch donde " + ciLabel + " ≤ ch - Puede aplicarse");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("Saturation proviso F¬ (b*): no T " + aFormula + " : ch where " + ciLabel
+                    + " ≤ ch found");
+        }
         return false; // No bloquear
     }
     
@@ -533,7 +553,10 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         for (FormulaLabel cjLabel : context.getLabels()) {
             // FILTRO: Solo considerar etiquetas accesibles en la rama actual
             if (iplTree != null && !iplTree.isLabelAccessible(cjLabel)) {
-                System.out.println("  ⏭️ T¬: Etiqueta " + cjLabel + " no accesible en rama " + iplTree.getBranchId() + ", saltando");
+                if (IPLTracer.isEnabled()) {
+                    tracer.logInfo("T¬: label " + cjLabel + " not accessible in branch "
+                            + iplTree.getBranchId() + ", skipping");
+                }
                 continue;
             }
             
@@ -571,95 +594,66 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
     }
     
     /**
-     * Propaga físicamente las fórmulas T compuestas por monotonicidad cuando se crea un nuevo label.
+     * Propagates T-signed composite formulas to a new label by Kripke monotonicity.
      * 
-     * Cuando F→ crea un nuevo label cj, debemos agregar físicamente todas las fórmulas T compuestas
-     * (especialmente T→) que tengan labels ci donde ci ≤ cj. Esto permite que las reglas de 2 premisas
-     * (reglas beta) se apliquen correctamente sobre estas fórmulas propagadas.
+     * When an existential rule (F→₁ or F¬) creates a new label cj, all T-composite
+     * formulas at labels ci where ci ≤ cj are implicitly in b* (Definition 5.3).
+     * This method materializes them as physical formulas at cj so that:
+     * - One-premise rules (T∧, T∨) can apply at cj with fresh rinstances
+     * - Two-premise rules get new main formulas at cj for matching
      * 
-     * Por ejemplo, si tenemos T (A→B) : c1 y se crea c3 donde c1 ≤ c3, entonces agregamos
-     * físicamente T (A→B) : c3 para que X_IMPLIES_F_RIGHT pueda aplicarse con F B : c3.
-     * 
-     * @param proofTree el árbol de prueba actual
-     * @param newLabel el nuevo label recién creado
-     * @param strategy la estrategia para crear orígenes
+     * Without this, formulas like T(P∧Q):ci would be re-selected after invalidation
+     * but blocked by existing rinstances for one-premise rules (T_AND:T(P∧Q):ci).
+     * Propagation creates T(P∧Q):cj — a distinct formula with fresh rinstance keys.
      */
-    private void propagateCompositeTFormulasForNewLabel(ClassicalProofTree proofTree, 
-                                                        FormulaLabel newLabel,
-                                                        ISimpleStrategy strategy) {
-        if (!(proofTree instanceof IPLProofTree)) {
-            return; // Solo aplicable a IPL
-        }
-        
+    private void propagateCompositeTFormulasForNewLabel(ClassicalProofTree proofTree, FormulaLabel newLabel) {
+        if (!(proofTree instanceof IPLProofTree)) return;
         IPLProofTree iplTree = (IPLProofTree) proofTree;
+        
         Context context = getContextFromLabel(newLabel);
-        if (context == null) {
-            System.out.println("⚠️ Monotonicidad: No se pudo obtener Context para propagar");
-            return;
-        }
+        if (context == null) return;
         
-        System.out.println("🔄 Monotonicidad: Propagando fórmulas T compuestas al nuevo label " + newLabel);
+        List<LabelledFormula> toPropagate = new ArrayList<>();
         
-        // Iterar sobre todas las fórmulas en la rama actual
-        IProofTreeVeryBasicIterator it = proofTree.getTopDownIterator();
-        int propagatedCount = 0;
-        
+        IProofTreeVeryBasicIterator it = iplTree.getTopDownIterator();
         while (it.hasNext()) {
             INode node = it.next();
-            if (!(node instanceof SignedFormulaNode)) {
-                continue;
-            }
+            if (!(node instanceof SignedFormulaNode)) continue;
             
             SignedFormulaNode sfNode = (SignedFormulaNode) node;
             SignedFormula sf = (SignedFormula) sfNode.getContent();
             
-            // Solo fórmulas T compuestas
-            if (!sf.getSign().equals(IPLSigns.TRUE)) {
-                continue;
-            }
-            
-            if (!(sf.getFormula() instanceof CompositeFormula)) {
-                continue; // Solo fórmulas compuestas
-            }
-            
-            if (!(sf instanceof LabelledFormula)) {
-                continue; // Debe tener label
-            }
+            if (!sf.getSign().equals(IPLSigns.TRUE)) continue;
+            if (!(sf.getFormula() instanceof CompositeFormula)) continue;
+            if (!(sf instanceof LabelledFormula)) continue;
             
             LabelledFormula lf = (LabelledFormula) sf;
-            FormulaLabel ciLabel = lf.getLabel();
+            FormulaLabel ci = lf.getLabel();
             
-            if (!iplTree.isLabelAccessible(ciLabel)) {
-                continue; // Label no accesible
-            }
-            
-            // Verificar si ci ≤ cj (nuevo label)
-            boolean ciLowerOrEqualNew = ciLabel.equals(newLabel) || 
-                                       context.isLowerOrEqualTo(ciLabel, newLabel);
-            
-            if (ciLowerOrEqualNew && !ciLabel.equals(newLabel)) {
-                // Crear nueva instancia física con el nuevo label
-                SignedFormula baseSf = lf.getSignedFormula();
-                LabelledFormula propagated = new LabelledFormula(newLabel, baseSf);
-                
-                // Verificar si ya existe
-                if (proofTree.getNode(propagated) != null) {
-                    continue; // Ya existe, no agregar duplicado
+            // ci < newLabel strictly (formula already at newLabel needs no propagation)
+            if (!ci.equals(newLabel) && context.isLowerOrEqualTo(ci, newLabel)) {
+                LabelledFormula propagated = new LabelledFormula(newLabel, lf.getSignedFormula());
+                if (iplTree.getNode(propagated) == null && !toPropagate.contains(propagated)) {
+                    toPropagate.add(propagated);
                 }
-                
-                // Agregar físicamente a la rama (usando NullRule para indicar propagación por monotonicidad)
-                proofTree.addLast(new SignedFormulaNode(propagated, SignedFormulaNodeState.NOT_ANALYSED,
-                        strategy.createOrigin(NullRule.INSTANCE, (SignedFormulaNode) node, null)));
-                
-                propagatedCount++;
-                System.out.println("  ➕ Propagada: " + propagated + " (desde " + lf + ")");
             }
         }
         
-        if (propagatedCount > 0) {
-            System.out.println("✅ Monotonicidad: " + propagatedCount + " fórmulas T compuestas propagadas a " + newLabel);
-        } else {
-            System.out.println("⏭️ Monotonicidad: Ninguna fórmula T compuesta para propagar a " + newLabel);
+        for (LabelledFormula lf : toPropagate) {
+            if (iplTree.getNode(lf) == null) {
+                iplTree.addLast(new SignedFormulaNode(lf, SignedFormulaNodeState.NOT_ANALYSED, NamedOrigin.PROPAGATION));
+                if (IPLTracer.isEnabled()) {
+                    tracer.logPropagation(lf.getSignedFormula().toString(), "ancestor",
+                            lf.getLabel().toString());
+                }
+            }
+        }
+        
+        if (!toPropagate.isEmpty()) {
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("Propagated " + toPropagate.size() + " T-composite formulas to label "
+                        + newLabel);
+            }
         }
     }
     

@@ -39,6 +39,8 @@ import rules.Rule;
  */
 public class IPLPBRuleApplicator implements IProofTransformation {
 
+    private static final IPLTracer tracer = IPLTracer.getInstance();
+
     private ISimpleStrategy strategy;
 
     /**
@@ -66,7 +68,9 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             return false;
         }
         
-        System.out.println("🔍 IPL PBRuleApplicator: Trying PB for single formula: " + candidate);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: trying for single formula: " + candidate);
+        }
         
         PBCandidateList singleCandidateList = new PBCandidateList();
         singleCandidateList.add(candidate);
@@ -76,29 +80,39 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     
     @Override
     public boolean apply(ClassicalProofTree current, SignedFormulaBuilder sfb) {
-        System.out.println("🔄 IPL PBRuleApplicator: Iniciando aplicación de PB como último recurso");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: starting as last resort");
+        }
         
         // ✅ CRUCIAL: PB solo debe aplicarse si NO hay fórmulas no analizadas (NOT_ANALYSED)
         // Si hay fórmulas NOT_ANALYSED, significa que las reglas operacionales aún tienen trabajo por hacer
         if (hasUnanalysedFormulas(current)) {
-            System.out.println("⏭️ IPL PBRuleApplicator: Hay fórmulas no analizadas - NO aplicar PB aún");
+            if (IPLTracer.isEnabled()) {
+                tracer.logPBSkipped("(branch)", "unanalyzed formulas remain");
+            }
             return false;
         }
         
-        System.out.println("✅ IPL PBRuleApplicator: No hay fórmulas no analizadas - PB puede aplicarse");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: no unanalyzed formulas remain, PB can apply");
+        }
         
         // En lugar de depender solo de getPBCandidates() (que puede estar vacío si las fórmulas ya fueron "procesadas"),
         // examinar TODAS las fórmulas compuestas en el árbol para ver si pueden beneficiarse de PB
         PBCandidateList allCompositeCandidates = findAllCompositeFormulas(current);
         
         if (allCompositeCandidates.size() > 0) {
-            System.out.println("🔄 IPL PBRuleApplicator: " + allCompositeCandidates.size() + " candidatos compuestos encontrados para PB (orden FIFO)");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB: " + allCompositeCandidates.size() + " composite candidates (FIFO order)");
+            }
             // NO ordenar: mantener orden FIFO (orden de inserción) del iterador top-down
             // allCompositeCandidates.sort(strategy.getComparator());
             return tryToApplyPBAsLastResort(current, sfb, allCompositeCandidates);
         }
         
-        System.out.println("⚠️ IPL PBRuleApplicator: No hay candidatos compuestos para PB");
+        if (IPLTracer.isEnabled()) {
+            tracer.logPBSkipped("(branch)", "no composite candidates");
+        }
         return false;
     }
     
@@ -127,11 +141,15 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                     
                     // Excluir fórmulas T¬ persistentes (que nunca se marcan como ANALYSED)
                     if (isTNotFormula(sf)) {
-                        System.out.println("   Fórmula T¬ persistente (excluida del check): " + sf);
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("PB check: T¬ persistent excluded: " + sf);
+                        }
                         continue; // No contar esta como "trabajo pendiente"
                     }
                     
-                    System.out.println("   Fórmula no analizada encontrada: " + sf);
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("PB check: unanalyzed formula found: " + sf);
+                    }
                     return true; // Hay trabajo pendiente para reglas operacionales
                 }
             }
@@ -174,8 +192,17 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      * Verifica si existe alguna instancia de la fórmula en el árbol,
      * independientemente de la etiqueta. Solo compara signo y fórmula.
      * 
-     * Esto es crucial para evitar aplicar PB cuando ya existe la premisa menor
-     * con una etiqueta diferente (generada por reglas operacionales).
+     * NOTA DE DISEÑO: Esta verificación ignora labels intencionalmente.
+     * La compatibilidad de labels es verificada por el applicator de dos
+     * premisas al momento de aplicar la regla. Si PB verificara labels,
+     * aplicaría PB para cada label incompatible, generando ramas infinitas
+     * (cada PB habilita reglas que crean nuevos labels via F→₁, propagación,
+     * y más PB). Ignorar labels actúa como guarda de terminación: PB solo
+     * se aplica cuando la subfórmula auxiliar no existe EN NINGÚN label,
+     * acotando el número de PB al número de subfórmulas de la fórmula inicial
+     * (Theorem 5.11, propiedad de subfórmula).
+     * 
+     * Paper: Algorithm 1 líneas 14-18 (§5 p.16).
      */
     private boolean formulaExistsInTree(ClassicalProofTree current, SignedFormula target) {
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = current.getTopDownIterator();
@@ -185,15 +212,18 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                 SignedFormulaNode sfNode = (SignedFormulaNode) node;
                 SignedFormula sf = (SignedFormula) sfNode.getContent();
                 
-                // Comparar solo signo y fórmula, ignorar etiqueta
                 if (sf.getSign().equals(target.getSign()) && 
                     sf.getFormula().equals(target.getFormula())) {
-                    System.out.println("   ✅ Encontrada instancia de la fórmula: " + sf);
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("PB: formula instance found: " + sf);
+                    }
                     return true;
                 }
             }
         }
-        System.out.println("   ❌ No se encontró ninguna instancia de: " + target.getSign() + " " + target.getFormula());
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: no instance found: " + target.getSign() + " " + target.getFormula());
+        }
         return false;
     }
     
@@ -249,7 +279,9 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             
             if (!candidates.contains(sf)) {
                 candidates.add(sf);
-                System.out.println("🎯 IPL PBRuleApplicator: Candidato compuesto agregado: " + sf);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logInfo("PB candidate: " + sf);
+                }
             }
         }
         
@@ -264,20 +296,26 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         
         // Obtener todas las reglas de 2 premisas de IPL (no solo PB_RULE_LIST)
         var twoPremiseRules = strategy.getMethod().getRules().get(IPLRuleStructures.TWO_PREMISE_RULE_LIST);
-        System.out.println("🔄 IPL PBRuleApplicator: Trabajando con reglas de 2 premisas como último recurso");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: working with 2-premise rules as last resort");
+        }
         
         // Para cada candidato, verificar si puede ser premisa mayor de alguna regla de 2 premisas
         // IMPORTANTE: Continuar evaluando candidatos aunque algunos no puedan aplicar PB
         // (puede ser que un candidato posterior sí pueda aplicarlo)
         for (int i = 0; i < candidates.size(); i++) {
             SignedFormula candidate = candidates.get(i);
-            System.out.println("🔍 IPL PBRuleApplicator: Evaluando candidato: " + candidate);
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB: evaluating candidate: " + candidate);
+            }
             
             // CASO 1: Buscar TODAS las reglas de 2 premisas donde este candidato puede ser la premisa mayor
             java.util.List<Rule> applicableRules = findAllTwoPremiseRulesForCandidate(candidate, twoPremiseRules);
             
             if (!applicableRules.isEmpty()) {
-                System.out.println("✅ Encontradas " + applicableRules.size() + " reglas de 2 premisas candidatas");
+                if (IPLTracer.isEnabled()) {
+                    tracer.logInfo("PB: " + applicableRules.size() + " applicable 2-premise rules found");
+                }
                 
                 // Cuando llegamos aquí desde apply, ya sabemos que twoPremiseApplicator.applySingle falló
                 // para esta fórmula. Esto significa que intentó todas las reglas de 2 premisas y ninguna pudo aplicarse.
@@ -291,25 +329,27 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                     SignedFormula requiredAux = getIPLRuleAuxiliaryCandidate(rule, candidate, sfb);
                     if (!formulaExistsInTree(current, requiredAux)) {
                         // Esta regla no tiene su premisa menor disponible - candidata para PB
-                        System.out.println("❌ Regla " + rule + " NO tiene premisa menor disponible: " + requiredAux);
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("PB: rule " + rule + " missing minor premise: " + requiredAux);
+                        }
                         if (ruleToApplyWithPB == null) {
                             ruleToApplyWithPB = rule;
                             auxToApplyWithPB = requiredAux;
                         }
                     } else {
-                        System.out.println("✅ Regla " + rule + " tiene premisa menor disponible: " + requiredAux);
-                        // Si tiene premisa menor disponible pero twoPremiseApplicator.applySingle falló,
-                        // significa que la conclusión ya existe o la instancia ya fue aplicada.
-                        // No aplicamos PB en este caso.
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logInfo("PB: rule " + rule + " has minor premise: " + requiredAux);
+                        }
                     }
                 }
                 
                 // Aplicar PB solo si encontramos una regla que no tiene su premisa menor disponible
                 if (ruleToApplyWithPB != null) {
-                    System.out.println("✅ Regla seleccionada para PB: " + ruleToApplyWithPB);
-                    System.out.println("🎯 IPL PBRuleApplicator: Regla de 2 premisas encontrada: " + ruleToApplyWithPB);
-                    System.out.println("🔍 IPL PBRuleApplicator: Premisa menor requerida: " + auxToApplyWithPB);
-                    System.out.println("💡 IPL PBRuleApplicator: Premisa menor no existe - aplicando PB");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("PB: selected rule: " + ruleToApplyWithPB);
+                        tracer.logInfo("PB: required minor premise: " + auxToApplyWithPB);
+                        tracer.logInfo("PB: minor premise missing - applying PB");
+                    }
                     
                     // Intentar aplicar PB y luego inmediatamente la regla de 2 premisas
                     // Si no se puede aplicar (ya fue aplicado), continuar con el siguiente candidato
@@ -317,16 +357,22 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                     if (applied) {
                         return true; // PB aplicado exitosamente
                     } else {
-                        System.out.println("⏭️ PB no se pudo aplicar para este candidato (ya aplicado), continuando con siguiente candidato");
+                        if (IPLTracer.isEnabled()) {
+                            tracer.logPBSkipped(candidate.toString(), "already applied for this candidate");
+                        }
                         // Continuar con el siguiente candidato
                     }
                 } else {
-                    System.out.println("⏭️ IPL PBRuleApplicator: Todas las reglas tienen premisa menor disponible pero no pueden aplicarse (conclusión existe o ya aplicada), continuando con siguiente candidato");
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logPBSkipped(candidate.toString(), "all rules have minor premise but couldn't apply");
+                    }
                 }
             }
         }
         
-        System.out.println("❌ IPL PBRuleApplicator: No se encontró oportunidad para PB como último recurso");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: no opportunity found as last resort");
+        }
         return false;
     }
     
@@ -344,11 +390,8 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         
         CompositeFormula comp = (CompositeFormula) candidate.getFormula();
         
-        System.out.println("🔍 Buscando regla de 2 premisas para: " + candidate.getSign() + " " + comp.getConnective());
-        
         // Buscar en la estructura de reglas de 2 premisas
         if (!(twoPremiseRulesList instanceof rules.structures.IPLConnectiveRoleSignRuleList)) {
-            System.out.println("❌ twoPremiseRulesList no es IPLConnectiveRoleSignRuleList");
             return result;
         }
         
@@ -387,11 +430,8 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         
         CompositeFormula comp = (CompositeFormula) candidate.getFormula();
         
-        System.out.println("🔍 Buscando regla de 2 premisas para: " + candidate.getSign() + " " + comp.getConnective());
-        
         // Buscar en la estructura de reglas de 2 premisas
         if (!(twoPremiseRulesList instanceof rules.structures.IPLConnectiveRoleSignRuleList)) {
-            System.out.println("❌ twoPremiseRulesList no es IPLConnectiveRoleSignRuleList");
             return null;
         }
         
@@ -412,15 +452,21 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         }
         
         if (!possibleRules.isEmpty()) {
-            System.out.println("✅ Encontradas " + possibleRules.size() + " reglas de 2 premisas candidatas");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB: " + possibleRules.size() + " 2-premise rule candidates");
+            }
             // Retornar la primera regla que coincida
             // (En el futuro se podría refinar para elegir la mejor)
             Rule selectedRule = possibleRules.get(0);
-            System.out.println("✅ Regla seleccionada: " + selectedRule);
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB: selected rule: " + selectedRule);
+            }
             return selectedRule;
         }
 
-        System.out.println("❌ No se encontró regla de 2 premisas para: " + candidate.getSign() + " " + comp.getConnective());
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: no 2-premise rule found for " + candidate.getSign() + " " + comp.getConnective());
+        }
         return null;
     }
     
@@ -430,7 +476,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      */
     private SignedFormula getIPLRuleAuxiliaryCandidate(Rule rule, SignedFormula candidate, SignedFormulaBuilder sfb) {
         if (!(rule instanceof rules.ipl.TwoPremisesOneConclusionRule)) {
-            System.out.println("⚠️ La regla no es TwoPremisesOneConclusionRule: " + rule);
             return null;
         }
         
@@ -450,13 +495,14 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             );
         
         if (auxiliaryCandidates == null || auxiliaryCandidates.size() == 0) {
-            System.out.println("⚠️ No se obtuvieron candidatos auxiliares para regla: " + rule);
             return null;
         }
         
         // Retornar el primer candidato auxiliar (sin etiqueta específica, PB la asignará)
         SignedFormula auxiliar = (SignedFormula) auxiliaryCandidates.get(0);
-        System.out.println("✅ Auxiliar determinado para " + rule + ": " + auxiliar);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: auxiliary determined for " + rule + ": " + auxiliar);
+        }
         return auxiliar;
     }
     
@@ -466,7 +512,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      */
     private SignedFormula generateIPLRuleConclusion(Rule rule, SignedFormula mainPremise, SignedFormula auxPremise, SignedFormulaBuilder sfb) {
         if (!(rule instanceof rules.ipl.TwoPremisesOneConclusionRule)) {
-            System.out.println("⚠️ La regla no es TwoPremisesOneConclusionRule: " + rule);
             return null;
         }
         
@@ -478,10 +523,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         premises.add(mainPremise);
         premises.add(auxPremise);
         
-        // DEBUG: Mostrar las premisas antes de generar conclusiones
-        System.out.println("DEBUG generateConclusion: Main premise: " + mainPremise + " (label: " + mainPremise.getLabel() + ", type: " + mainPremise.getLabel().getClass().getSimpleName() + ")");
-        System.out.println("DEBUG generateConclusion: Aux premise: " + auxPremise + " (label: " + auxPremise.getLabel() + ", type: " + auxPremise.getLabel().getClass().getSimpleName() + ")");
-        
         // Usar getPossibleConclusions de la regla
         logic.signedFormulas.SignedFormulaList conclusions = 
             twoPremiseRule.getPossibleConclusions(
@@ -490,18 +531,19 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                 premises
             );
         
-        System.out.println("DEBUG generateConclusion: Conclusions returned: " + (conclusions != null ? conclusions.size() : "null"));
-        
         if (conclusions == null || conclusions.size() == 0) {
-            System.out.println("⚠️ No se obtuvieron conclusiones para regla: " + rule);
-            System.out.println("   Esto puede deberse a que la condición de etiquetas no se cumple");
-            System.out.println("   Main label: " + mainPremise.getLabel() + ", Aux label: " + auxPremise.getLabel());
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB: no conclusions for rule " + rule + " (main label: " + mainPremise.getLabel()
+                    + ", aux label: " + auxPremise.getLabel() + ")");
+            }
             return null;
         }
         
         // Retornar la primera conclusión
         SignedFormula conclusion = (SignedFormula) conclusions.get(0);
-        System.out.println("✅ Conclusión generada para " + rule + ": " + conclusion);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: conclusion generated for " + rule + ": " + conclusion);
+        }
         return conclusion;
     }
     
@@ -514,12 +556,10 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) sfb.getSignedFormulaFactory();
             // ✅ CORRECCIÓN: usar createLabelledFormula en lugar de createSignedFormula
             SignedFormula result = iplFactory.createLabelledFormula(sign, formula);
-            System.out.println("🏷️ IPL PBRuleApplicator: Creada LabelledFormula: " + result + " (" + result.getClass().getSimpleName() + ")");
             return result;
         } else {
             // Fallback: crear SignedFormula normal
             SignedFormula result = sfb.createSignedFormula(sign, formula);
-            System.out.println("⚠️ IPL PBRuleApplicator: Creada SignedFormula (fallback): " + result + " (" + result.getClass().getSimpleName() + ")");
             return result;
         }
     }
@@ -549,7 +589,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             // Crear SignedFormula con ContextFormulaLabel usando la factory IPL
             SignedFormula result = iplFactory.createLabelledFormula(contextLabel, 
                                     iplFactory.createSignedFormula(sign, formula));
-            System.out.println("🏷️ IPL PBRuleApplicator: Creada LabelledFormula con etiqueta específica: " + result + " (label type: " + result.getLabel().getClass().getSimpleName() + ")");
             return result;
         } else {
             // Fallback: crear SignedFormula normal
@@ -571,16 +610,17 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     private boolean applyPBAndTwoPremiseRule(ClassicalProofTree current, SignedFormulaBuilder sfb,
             SignedFormula mainPremise, Rule rule, SignedFormula requiredAux) {
         
-        System.out.println("🔥 IPL PBRuleApplicator: Evaluando PB + regla de 2 premisas");
-        System.out.println("   Premisa mayor: " + mainPremise);
-        System.out.println("   Regla: " + rule.toString());
-        System.out.println("   Auxiliar requerido: " + requiredAux);
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB+Rule: main=" + mainPremise + ", rule=" + rule + ", aux=" + requiredAux);
+        }
         
         // PASO 1: Obtener la etiqueta compartida (la misma que la premisa mayor)
         // PB debe crear ambas ramas con la MISMA etiqueta que la premisa mayor
         
         FormulaLabel sharedLabel = mainPremise.getLabel();
-        System.out.println("🏷️ IPL PBRuleApplicator: Usando etiqueta de premisa mayor para PB: " + sharedLabel + " (type: " + sharedLabel.getClass().getSimpleName() + ")");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: using major premise label: " + sharedLabel);
+        }
         
         // Asegurarnos de que la etiqueta compartida sea ContextFormulaLabel
         logic.labelledFormulas.ContextFormulaLabel contextSharedLabel;
@@ -594,7 +634,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             if (!iplFactory.getContext().getLabels().contains(contextSharedLabel)) {
                 iplFactory.getContext().addElement(contextSharedLabel);
             }
-            System.out.println("🔄 Convertida etiqueta a ContextFormulaLabel: " + contextSharedLabel);
         }
         
         // PASO 2: Verificar si las fórmulas que se generarían al aplicar PB ya existen
@@ -617,8 +656,9 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             );
             
             if (existingRequired != null) {
-                System.out.println("⏭️ PB no aplicado: auxiliar requerido ya existe en el grupo de accesibilidad: " + existingRequired);
-                System.out.println("   Si el auxiliar requerido existe, la regla debería poder aplicarse directamente sin PB");
+                if (IPLTracer.isEnabled()) {
+                    tracer.logPBSkipped(mainPremise.toString(), "required aux already exists: " + existingRequired);
+                }
                 return false;
             }
             
@@ -631,8 +671,9 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             );
             
             if (existingOpposite != null) {
-                System.out.println("⏭️ PB no aplicado: auxiliar opuesto ya existe en el grupo de accesibilidad: " + existingOpposite);
-                System.out.println("   Si el auxiliar opuesto ya existe, la rama derecha de PB sería redundante");
+                if (IPLTracer.isEnabled()) {
+                    tracer.logPBSkipped(mainPremise.toString(), "opposite aux already exists: " + existingOpposite);
+                }
                 return false;
             }
         }
@@ -644,12 +685,16 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         if (current instanceof IPLProofTree) {
             IPLProofTree iplTree = (IPLProofTree) current;
             if (iplTree.wasPBRuleInstanceAppliedInAccessibilityGroup(pbInstanceKey)) {
-                System.out.println("⏭️ PB no aplicado: ya se aplicó PB sobre esta combinación en el grupo de accesibilidad: " + pbInstanceKey);
+                if (IPLTracer.isEnabled()) {
+                    tracer.logPBSkipped(mainPremise.toString(), "PB already applied: " + pbInstanceKey);
+                }
                 return false;
             }
         }
         
-        System.out.println("✅ Las fórmulas que se generarían no existen y PB no fue aplicado antes - aplicando PB");
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB: formulas don't exist yet and PB not applied before - applying");
+        }
         
         // PASO 3: Aplicar PB para crear la premisa menor faltante
         // Crear auxiliar requerido con la etiqueta compartida (ContextFormulaLabel)
@@ -665,14 +710,10 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                 auxOpposite, SignedFormulaNodeState.NOT_ANALYSED, strategy
                         .createOrigin(IPLRules.PB, current.getNode(mainPremise), null)));
         
-        System.out.println("➡️  PB Rama derecha: " + auxOpposite);
-        
         // Crear rama izquierda con auxiliar requerido (misma etiqueta)
         ClassicalProofTree left = (ClassicalProofTree) current.addLeft(new SignedFormulaNode(auxWithSharedLabel,
                 SignedFormulaNodeState.NOT_ANALYSED, strategy.createOrigin(IPLRules.PB, current
                         .getNode(mainPremise), null)));
-        
-        System.out.println("⬅️  PB Rama izquierda: " + auxWithSharedLabel);
         
         // PASO 2: Inmediatamente aplicar la regla de 2 premisas en la rama izquierda
         // Para reglas IPL, generar la conclusión usando la lógica específica de la regla
@@ -684,20 +725,24 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             // Crear una versión de mainPremise con ContextFormulaLabel
             mainPremiseWithContextLabel = createIPLSignedFormulaWithLabel(sfb,
                 (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), contextSharedLabel);
-            System.out.println("🔄 Recreada mainPremise con ContextFormulaLabel: " + mainPremiseWithContextLabel);
         }
         
         SignedFormula conclusion = generateIPLRuleConclusion(rule, mainPremiseWithContextLabel, auxWithSharedLabel, sfb);
         
         if (conclusion == null) {
-            System.out.println("❌ No se pudo generar conclusión para PB");
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB: could not generate conclusion");
+            }
             return false;
         }
         
         left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED, strategy
                 .createOrigin(rule, current.getNode(mainPremise), left.getNode(auxWithSharedLabel))));
         
-        System.out.println("✅ Regla 2 premisas aplicada: " + conclusion);
+        if (IPLTracer.isEnabled()) {
+            tracer.logRuleApplied(rule.toString(), mainPremise.toString(), auxWithSharedLabel.toString(), conclusion.toString());
+            tracer.logPBApplied(mainPremise.toString(), rule.toString(), auxWithSharedLabel.toString(), "left", "right");
+        }
         
         // Registrar PB en la rama actual (donde se aplica PB) para prevenir loops infinitos
         // Se registra en la rama actual, no donde está la fórmula, para permitir que
@@ -713,9 +758,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         right.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
         // NO cambiar strategy.setCurrent aquí - el algoritmo canónico maneja qué rama procesar
         
-        System.out.println("🎯 IPL PBRuleApplicator: PB + regla de 2 premisas aplicado exitosamente");
-        System.out.println("  ➡️ Right branch created: closed=" + right.isClosed() + ", completed=" + right.isCompleted());
-        System.out.println("  ⬅️ Left branch created: closed=" + left.isClosed() + ", completed=" + left.isCompleted());
         return true;
     }
 

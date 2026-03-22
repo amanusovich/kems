@@ -191,13 +191,14 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 				repaint();
 			}
 		} catch (Throwable e) {
-			if (e instanceof OutOfMemoryError) {
-				proofViewer.getProverInterface().showErrorMessage(
-						ProverInterface.OUT_OF_MEMORY_MESSAGE);
-			} else {
-				proofViewer.getProverInterface().showErrorMessage(
-						e.getMessage());
-
+			if (proofViewer.getProverInterface() != null) {
+				if (e instanceof OutOfMemoryError) {
+					proofViewer.getProverInterface().showErrorMessage(
+							ProverInterface.OUT_OF_MEMORY_MESSAGE);
+				} else {
+					proofViewer.getProverInterface().showErrorMessage(
+							e.getMessage());
+				}
 			}
 			close();
 		}
@@ -489,6 +490,12 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 			formulasToButtons.put(sfn, fb);
 			fb.setBackground(proofViewer.getSelectedFormulaButtonColor());
 		}
+		if (proofViewer instanceof IPLProofViewer
+				&& sfn.getOrigin() instanceof main.proofTree.origin.SignedFormulaNodeOrigin) {
+			String ruleName = ((main.proofTree.origin.SignedFormulaNodeOrigin) sfn.getOrigin())
+					.getRule().toString();
+			fb.setForeground(IPLColorScheme.getColor(ruleName));
+		}
 		return fb;
 	}
 
@@ -603,7 +610,8 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 		fb.setBackground(proofViewer.getHiglightedFormulaButtonColor());
 		fb.repaint();
 
-		if (!(fb.getSignedFormulaNode().getOrigin().equals(NamedOrigin.DEFINITION) || fb
+		if (fb.getSignedFormulaNode().getOrigin() != null
+				&& !(fb.getSignedFormulaNode().getOrigin().equals(NamedOrigin.DEFINITION) || fb
 				.getSignedFormulaNode().getOrigin().equals(NamedOrigin.PROBLEM))) {
 
 			SignedFormulaNode main = (fb.getSignedFormulaNode().getOrigin())
