@@ -126,65 +126,23 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      * IMPORTANTE: Solo verifica la rama actual (no incluye ancestros) para determinar si hay trabajo pendiente.
      * Cuando todas las fórmulas de la rama actual están ANALYSED, se permite PB que considerará ancestros.
      * 
-     * IMPORTANTE: Excluye fórmulas T¬ persistentes (T ¬A donde A no es negación),
-     * ya que estas nunca se marcan como ANALYSED por diseño.
+     * All formulas are now marked ANALYSED normally; universal formulas (T(A→B), T(¬A))
+     * are re-selected via Def. 5.6 in selectUnanalyzedFormula, so no exclusion is needed.
      */
     private boolean hasUnanalysedFormulas(ClassicalProofTree current) {
         main.proofTree.iterator.IProofTreeBasicIterator it = current.getLocalIterator();
-        
         while (it.hasNext()) {
             main.proofTree.INode node = it.next();
             if (node instanceof SignedFormulaNode) {
                 SignedFormulaNode sfNode = (SignedFormulaNode) node;
                 if (sfNode.getState() == SignedFormulaNodeState.NOT_ANALYSED) {
-                    SignedFormula sf = (SignedFormula) sfNode.getContent();
-                    
-                    // Excluir fórmulas T¬ persistentes (que nunca se marcan como ANALYSED)
-                    if (isTNotFormula(sf)) {
-                        if (IPLTracer.isEnabled()) {
-                            tracer.logInfo("PB check: T¬ persistent excluded: " + sf);
-                        }
-                        continue; // No contar esta como "trabajo pendiente"
-                    }
-                    
                     if (IPLTracer.isEnabled()) {
-                        tracer.logInfo("PB check: unanalyzed formula found: " + sf);
+                        tracer.logInfo("PB check: unanalyzed formula found: " + sfNode.getContent());
                     }
-                    return true; // Hay trabajo pendiente para reglas operacionales
+                    return true;
                 }
             }
         }
-        
-        // No hay fórmulas NOT_ANALYSED en la rama actual - se permite PB
-        // (PB considerará fórmulas de ancestros en findAllCompositeFormulas)
-        return false;
-    }
-    
-    /**
-     * ✅ ACTIVADO: T¬ ES persistente (regla gamma)
-     * 
-     * Las fórmulas T¬ deben reaplicarse cuando aparecen nuevos labels:
-     * - Son reglas gamma que deben aplicarse a todos los mundos accesibles
-     * - Cuando aparece un nuevo cj donde ci ⪯ cj, debe generarse físicamente F A : cj
-     * - Por eso, T¬ nunca se marca como ANALYSED
-     * 
-     * @return true si es T¬A (cualquier negación), false en caso contrario
-     */
-    private boolean isTNotFormula(SignedFormula sf) {
-        if (sf == null) return false;
-        
-        // Verificar que sea T-signed
-        if (!sf.getSign().equals(IPLSigns.TRUE)) {
-            return false;
-        }
-        
-        // Verificar que la fórmula sea una negación (¬A)
-        Formula formula = sf.getFormula();
-        if (formula instanceof CompositeFormula) {
-            CompositeFormula comp = (CompositeFormula) formula;
-            return comp.getConnective().equals(IPLConnectives.NOT);
-        }
-        
         return false;
     }
     
@@ -605,7 +563,11 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     }
     
     /**
-     * Aplica PB y luego inmediatamente la regla de 2 premisas
+     * Aplica PB y luego inmediatamente la regla de 2 premisas.
+     *
+     * Implementa Algorithm 1 líneas 14-18: aplica PB para introducir la premisa menor
+     * faltante, aplica la regla de 2 premisas en la rama izquierda y registra la
+     * instancia en el conjunto global rinstances para evitar re-aplicación.
      */
     private boolean applyPBAndTwoPremiseRule(ClassicalProofTree current, SignedFormulaBuilder sfb,
             SignedFormula mainPremise, Rule rule, SignedFormula requiredAux) {
@@ -615,19 +577,15 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         }
         
         // PASO 1: Obtener la etiqueta compartida (la misma que la premisa mayor)
-        // PB debe crear ambas ramas con la MISMA etiqueta que la premisa mayor
-        
         FormulaLabel sharedLabel = mainPremise.getLabel();
         if (IPLTracer.isEnabled()) {
             tracer.logInfo("PB: using major premise label: " + sharedLabel);
         }
         
-        // Asegurarnos de que la etiqueta compartida sea ContextFormulaLabel
         logic.labelledFormulas.ContextFormulaLabel contextSharedLabel;
         if (sharedLabel instanceof logic.labelledFormulas.ContextFormulaLabel) {
             contextSharedLabel = (logic.labelledFormulas.ContextFormulaLabel) sharedLabel;
         } else {
-            // Convertir a ContextFormulaLabel usando el Context de la factory
             IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) sfb.getSignedFormulaFactory();
             contextSharedLabel = new logic.labelledFormulas.ContextFormulaLabel(
                 iplFactory.getContext(), sharedLabel.getIndex());
@@ -636,97 +594,69 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             }
         }
         
-        // PASO 2: Verificar si las fórmulas que se generarían al aplicar PB ya existen
-        // en el grupo de accesibilidad (rama actual y ancestras)
-        // Si ya existen, no tiene sentido aplicar PB porque generaría ramas redundantes
-        
-        // Calcular el signo opuesto (se usará para la verificación y para crear la fórmula opuesta)
         FormulaSign oppositeSign = requiredAux.getSign().equals(IPLSigns.TRUE) ? 
             (FormulaSign) IPLSigns.FALSE : (FormulaSign) IPLSigns.TRUE;
         
+        // PASO 2: Preparar las fórmulas auxiliares (con etiqueta compartida)
+        SignedFormula auxWithSharedLabel = createIPLSignedFormulaWithLabel(sfb, 
+            (FormulaSign) requiredAux.getSign(), requiredAux.getFormula(), contextSharedLabel);
+        
+        SignedFormula auxOpposite = createIPLSignedFormulaWithLabel(sfb, 
+            oppositeSign, requiredAux.getFormula(), contextSharedLabel);
+        
+        SignedFormula mainPremiseWithContextLabel;
+        if (mainPremise.getLabel() instanceof logic.labelledFormulas.ContextFormulaLabel) {
+            mainPremiseWithContextLabel = mainPremise;
+        } else {
+            mainPremiseWithContextLabel = createIPLSignedFormulaWithLabel(sfb,
+                (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), contextSharedLabel);
+        }
+        
+        // PASO 3: Si la premisa menor ya existe, la regla puede disparar directamente — no aplicar PB
         if (current instanceof IPLProofTree) {
             IPLProofTree iplTree = (IPLProofTree) current;
-            
-            // Verificar si el auxiliar requerido (rama izquierda) ya existe con esta etiqueta
-            // Si existe, podemos aplicar la regla directamente sin PB, así que no tiene sentido aplicar PB
             SignedFormula existingRequired = iplTree.findFormulaWithSignAndLabel(
-                requiredAux.getFormula(), 
-                requiredAux.getSign(),
-                contextSharedLabel
-            );
-            
+                requiredAux.getFormula(), requiredAux.getSign(), contextSharedLabel);
             if (existingRequired != null) {
                 if (IPLTracer.isEnabled()) {
                     tracer.logPBSkipped(mainPremise.toString(), "required aux already exists: " + existingRequired);
                 }
                 return false;
             }
-            
-            // Verificar si el auxiliar opuesto (rama derecha) ya existe con esta etiqueta
-            // Si existe, no tiene sentido aplicar PB porque la rama derecha sería redundante
-            SignedFormula existingOpposite = iplTree.findFormulaWithSignAndLabel(
-                requiredAux.getFormula(), 
-                oppositeSign,
-                contextSharedLabel
-            );
-            
-            if (existingOpposite != null) {
-                if (IPLTracer.isEnabled()) {
-                    tracer.logPBSkipped(mainPremise.toString(), "opposite aux already exists: " + existingOpposite);
-                }
-                return false;
-            }
         }
         
-        // PASO 2b: Verificar si ya se aplicó PB sobre esta combinación en el grupo de accesibilidad
-        // (rama actual o alguna de sus ancestras). Esto previene loops infinitos.
-        String pbInstanceKey = "PB:" + rule.toString() + ":" + mainPremise.toString() + ":" + requiredAux.toString();
+        // PASO 4: Verificar rinstances — si la instancia ya fue aplicada, intentar labels alternativos
+        // (Algorithm 1 líneas 7/10: "r ∉ rinstances"). La clave usa el mismo formato que
+        // IPLTwoPremiseRuleApplicator.createRuleInstanceKey para consistencia.
+        String ruleInstanceKey = rule.toString() + ":" + mainPremiseWithContextLabel.toString()
+                + ":" + auxWithSharedLabel.toString();
         
         if (current instanceof IPLProofTree) {
             IPLProofTree iplTree = (IPLProofTree) current;
-            if (iplTree.wasPBRuleInstanceAppliedInAccessibilityGroup(pbInstanceKey)) {
+            if (iplTree.wasRuleInstanceApplied(ruleInstanceKey)) {
                 if (IPLTracer.isEnabled()) {
-                    tracer.logPBSkipped(mainPremise.toString(), "PB already applied: " + pbInstanceKey);
+                    tracer.logPBSkipped(mainPremise.toString(), "rule instance already applied: "
+                        + ruleInstanceKey + " - trying accessible labels cj > ci");
                 }
-                return false;
+                return tryPBAtAlternativeLabels(current, sfb, mainPremise, rule, requiredAux,
+                        contextSharedLabel, oppositeSign, iplTree);
             }
         }
         
         if (IPLTracer.isEnabled()) {
-            tracer.logInfo("PB: formulas don't exist yet and PB not applied before - applying");
+            tracer.logInfo("PB: minor premise missing and rule not yet applied - applying PB");
         }
         
-        // PASO 3: Aplicar PB para crear la premisa menor faltante
-        // Crear auxiliar requerido con la etiqueta compartida (ContextFormulaLabel)
-        SignedFormula auxWithSharedLabel = createIPLSignedFormulaWithLabel(sfb, 
-            (FormulaSign) requiredAux.getSign(), requiredAux.getFormula(), contextSharedLabel);
-        
-        // Crear auxiliar opuesto con la MISMA etiqueta compartida (ContextFormulaLabel)
-        SignedFormula auxOpposite = createIPLSignedFormulaWithLabel(sfb, 
-            oppositeSign, requiredAux.getFormula(), contextSharedLabel);
-        
-        // Crear rama derecha con auxiliar opuesto (misma etiqueta)
+        // PASO 5: Aplicar PB para crear la premisa menor faltante
         ClassicalProofTree right = (ClassicalProofTree) current.addRight(new SignedFormulaNode(
                 auxOpposite, SignedFormulaNodeState.NOT_ANALYSED, strategy
                         .createOrigin(IPLRules.PB, current.getNode(mainPremise), null)));
         
-        // Crear rama izquierda con auxiliar requerido (misma etiqueta)
-        ClassicalProofTree left = (ClassicalProofTree) current.addLeft(new SignedFormulaNode(auxWithSharedLabel,
-                SignedFormulaNodeState.NOT_ANALYSED, strategy.createOrigin(IPLRules.PB, current
-                        .getNode(mainPremise), null)));
+        ClassicalProofTree left = (ClassicalProofTree) current.addLeft(new SignedFormulaNode(
+                auxWithSharedLabel, SignedFormulaNodeState.NOT_ANALYSED, strategy
+                        .createOrigin(IPLRules.PB, current.getNode(mainPremise), null)));
         
-        // PASO 2: Inmediatamente aplicar la regla de 2 premisas en la rama izquierda
-        // Para reglas IPL, generar la conclusión usando la lógica específica de la regla
-        // Asegurarnos de que mainPremise también use ContextFormulaLabel
-        SignedFormula mainPremiseWithContextLabel;
-        if (mainPremise.getLabel() instanceof logic.labelledFormulas.ContextFormulaLabel) {
-            mainPremiseWithContextLabel = mainPremise;
-        } else {
-            // Crear una versión de mainPremise con ContextFormulaLabel
-            mainPremiseWithContextLabel = createIPLSignedFormulaWithLabel(sfb,
-                (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), contextSharedLabel);
-        }
-        
+        // PASO 6: Inmediatamente aplicar la regla de 2 premisas en la rama izquierda
         SignedFormula conclusion = generateIPLRuleConclusion(rule, mainPremiseWithContextLabel, auxWithSharedLabel, sfb);
         
         if (conclusion == null) {
@@ -744,21 +674,125 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             tracer.logPBApplied(mainPremise.toString(), rule.toString(), auxWithSharedLabel.toString(), "left", "right");
         }
         
-        // Registrar PB en la rama actual (donde se aplica PB) para prevenir loops infinitos
-        // Se registra en la rama actual, no donde está la fórmula, para permitir que
-        // ramas hermanas apliquen PB independientemente
+        // PASO 7: Registrar instancia de regla en rinstances globales (Algorithm 1, línea 18)
         if (current instanceof IPLProofTree) {
-            IPLProofTree iplTree = (IPLProofTree) current;
-            iplTree.registerPBRuleInstance(pbInstanceKey); // Registra en la rama actual
+            ((IPLProofTree) current).registerRuleInstance(ruleInstanceKey);
         }
         
-        // Actualizar estructuras de control
-        // NO agregar ramas a la cola aquí - el algoritmo canónico las agregará cuando detecte que hay ramas hijas
+        // Mark ANALYSED in both branches. Universal formulas (T(A→B), T(¬A)) will be
+        // re-selected by selectUnanalyzedFormula when Def. 5.6 is unsatisfied for new worlds.
         left.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
         right.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
-        // NO cambiar strategy.setCurrent aquí - el algoritmo canónico maneja qué rama procesar
         
         return true;
+    }
+
+    /**
+     * Cuando PB está bloqueado en la etiqueta ci de la premisa mayor (porque F(aux):ci ya existe),
+     * busca etiquetas accesibles cj >= ci donde no existan ni T(aux):cj ni F(aux):cj y aplica PB ahí.
+     *
+     * Por ejemplo, para T(A→B):c1 con T(A):c23 faltante:
+     *   - LEFT: T(A):c23 → regla da T(B):c23 → T_AND → T(p3):c23 contradice F(p3):c23 → CIERRA
+     *   - RIGHT: F(A):c23 → condición Def 5.6 para T(A→B):c1 en cj=c23 satisfecha ✓
+     */
+    private boolean tryPBAtAlternativeLabels(ClassicalProofTree current, SignedFormulaBuilder sfb,
+            SignedFormula mainPremise, Rule rule, SignedFormula requiredAux,
+            logic.labelledFormulas.ContextFormulaLabel ci, FormulaSign oppositeSign,
+            IPLProofTree iplTree) {
+
+        // Recopilar etiquetas accesibles cj >= ci desde b*
+        java.util.Set<SignedFormula> bStar = iplTree.extendBranch();
+        java.util.LinkedHashSet<logic.labelledFormulas.ContextFormulaLabel> labelsToTry =
+                new java.util.LinkedHashSet<>();
+
+        for (SignedFormula bsf : bStar) {
+            if (!(bsf instanceof logic.labelledFormulas.LabelledFormula)) continue;
+            logic.labelledFormulas.FormulaLabel l =
+                    ((logic.labelledFormulas.LabelledFormula) bsf).getLabel();
+            if (!(l instanceof logic.labelledFormulas.ContextFormulaLabel)) continue;
+            logic.labelledFormulas.ContextFormulaLabel cj =
+                    (logic.labelledFormulas.ContextFormulaLabel) l;
+            if (cj.toString().equals(ci.toString())) continue;          // omitir ci
+            if (!ci.getContext().isLowerOrEqualTo(ci, cj)) continue;    // necesitamos cj >= ci
+            if (!iplTree.isLabelAccessible(cj)) continue;               // etiqueta accesible
+            labelsToTry.add(cj);
+        }
+
+        for (logic.labelledFormulas.ContextFormulaLabel cj : labelsToTry) {
+            // Si T(aux):cj ya existe, la regla debería haber disparado directamente
+            SignedFormula existingReq = iplTree.findFormulaWithSignAndLabel(
+                    requiredAux.getFormula(), requiredAux.getSign(), cj);
+            if (existingReq != null) continue;
+
+            // Si F(aux):cj ya existe, también bloqueado en esta etiqueta
+            SignedFormula existingOpp = iplTree.findFormulaWithSignAndLabel(
+                    requiredAux.getFormula(), oppositeSign, cj);
+            if (existingOpp != null) continue;
+
+            // Crear fórmulas auxiliares en cj (necesarias para la clave de rinstances)
+            SignedFormula auxWithCj = createIPLSignedFormulaWithLabel(sfb,
+                    (FormulaSign) requiredAux.getSign(), requiredAux.getFormula(), cj);
+            SignedFormula auxOppositeCj = createIPLSignedFormulaWithLabel(sfb,
+                    oppositeSign, requiredAux.getFormula(), cj);
+
+            // Verificar rinstances para esta combinación (rule, main, aux@cj)
+            String ruleKeyAlt = rule.toString() + ":" + mainPremise.toString() + ":" + auxWithCj.toString();
+            if (iplTree.wasRuleInstanceApplied(ruleKeyAlt)) continue;
+
+            if (IPLTracer.isEnabled()) {
+                tracer.logInfo("PB-ALT: etiqueta ci=" + ci + " bloqueada, aplicando PB en cj=" + cj
+                        + " para aux " + requiredAux.getSign() + "(" + requiredAux.getFormula() + ")");
+            }
+
+            // Crear ramas PB
+            ClassicalProofTree right = (ClassicalProofTree) current.addRight(new SignedFormulaNode(
+                    auxOppositeCj, SignedFormulaNodeState.NOT_ANALYSED, strategy
+                            .createOrigin(IPLRules.PB, current.getNode(mainPremise), null)));
+
+            ClassicalProofTree left = (ClassicalProofTree) current.addLeft(new SignedFormulaNode(
+                    auxWithCj, SignedFormulaNodeState.NOT_ANALYSED, strategy
+                            .createOrigin(IPLRules.PB, current.getNode(mainPremise), null)));
+
+            // Aplicar la regla inmediatamente en la rama izquierda (conclusión en cj)
+            // Asegurarse de que mainPremise tenga ContextFormulaLabel (igual que en applyPBAndTwoPremiseRule)
+            SignedFormula mainPremiseForConclusion;
+            if (mainPremise.getLabel() instanceof logic.labelledFormulas.ContextFormulaLabel) {
+                mainPremiseForConclusion = mainPremise;
+            } else {
+                mainPremiseForConclusion = createIPLSignedFormulaWithLabel(sfb,
+                        (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), ci);
+            }
+            SignedFormula conclusion = generateIPLRuleConclusion(rule, mainPremiseForConclusion, auxWithCj, sfb);
+            if (conclusion != null) {
+                left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED,
+                        strategy.createOrigin(rule, current.getNode(mainPremise),
+                                left.getNode(auxWithCj))));
+            }
+
+            if (IPLTracer.isEnabled()) {
+                String concStr = conclusion != null ? conclusion.toString() : "(null)";
+                tracer.logRuleApplied(rule.toString(), mainPremise.toString(),
+                        auxWithCj.toString(), concStr);
+                tracer.logPBApplied(mainPremise.toString(), rule.toString(),
+                        auxWithCj.toString(), "left", "right");
+            }
+
+            // Registrar instancia de regla en rinstances globales (Algorithm 1, línea 18)
+            iplTree.registerRuleInstance(ruleKeyAlt);
+
+            // Mark ANALYSED in both branches; Def. 5.6 re-check in selectUnanalyzedFormula
+            // handles re-selection of universal formulas when new worlds appear.
+            left.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
+            right.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
+
+            return true;
+        }
+
+        if (IPLTracer.isEnabled()) {
+            tracer.logInfo("PB-ALT: no se encontraron etiquetas alternativas viables para "
+                    + requiredAux.getSign() + "(" + requiredAux.getFormula() + ")");
+        }
+        return false;
     }
 
 }

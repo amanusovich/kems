@@ -16,7 +16,10 @@ import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.SignedFormulaBuilder;
 import logic.signedFormulas.SignedFormulaFactory;
 import logic.signedFormulas.SignedFormulaList;
+import logic.formulas.Formula;
+import logicalSystems.ipl.IPLConnectives;
 import logicalSystems.ipl.IPLProofTree;
+import logicalSystems.ipl.IPLSigns;
 import main.newstrategy.ISimpleStrategy;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.SignedFormulaNodeState;
@@ -478,9 +481,6 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			if (proofTree instanceof IPLProofTree) {
 				IPLProofTree iplTree = (IPLProofTree) proofTree;
 				iplTree.registerRuleInstance(ruleInstance);
-				if (IPLTracer.isEnabled()) {
-					tracer.logRinstanceRegistered(ruleInstance);
-				}
 			}
 			
 			if (!conclusionExists) {
@@ -490,7 +490,9 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 						.createOrigin(aRule, proofTree.getNode(mainCandidate),
 								proofTree.getNode(auxCandidate))));
 				
-				// removes main from the list of PB candidates
+				// Mark as ANALYSED unconditionally. Universal formulas (T(A→B), T(¬A))
+				// are re-selected by selectUnanalyzedFormula whenever Definition 5.6 is
+				// not yet satisfied for new accessible worlds.
 				strategy.getCurrent().removeFromPBCandidates(mainCandidate,
 						SignedFormulaNodeState.ANALYSED);
 

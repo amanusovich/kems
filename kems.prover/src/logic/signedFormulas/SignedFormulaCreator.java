@@ -4,6 +4,9 @@
  */
 package logic.signedFormulas;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import logic.formulas.FormulaFactory;
 import logic.problem.Problem;
 import parsers.ParserUser;
@@ -162,12 +165,29 @@ public class SignedFormulaCreator {
 	}
 
 	private void cloneIPLContext() {
-		// Sincronizar el Context del Problem con el de la factory
 		if (_sff instanceof IPLSignedFormulaFactory) {
 			IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) _sff;
 			_problem.setIPLContext(iplFactory.getContext());
 			_problem.setSignedFormulaFactory(iplFactory);
-			// System.out.println("✅ IPL: Factory y Context sincronizados entre Problem y SignedFormulaCreator");
+
+			// Replace problem formulas with their ContextFormulaLabel versions.
+			// The parser populates Problem.getFormulas() with plain FormulaLabel instances.
+			// cloneAll() converts them to ContextFormulaLabel in the factory map, but
+			// Problem.getFormulas() is not updated. Without this replacement, fillWith()
+			// adds plain-FormulaLabel formulas to the proof tree, and when rules later
+			// call FormulaLabel.getGreaterFormulaLabel() they get a plain label with no
+			// context, so the relation c0 <= c1 (and any relation from an initial
+			// formula's label) is never registered in the Context.
+			SignedFormulaList formulasList = _problem.getFormulas();
+			List<SignedFormula> originals = new ArrayList<>(formulasList.getList());
+			while (formulasList.size() > 0) {
+				formulasList.remove(0);
+			}
+			Map<String, SignedFormula> iplMap = iplFactory.getSignedFormulas();
+			for (SignedFormula sf : originals) {
+				SignedFormula iplVersion = iplMap.get(sf.toString());
+				formulasList.add(iplVersion != null ? iplVersion : sf);
+			}
 		}
 	}
 	

@@ -9,10 +9,10 @@ import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import logic.formulas.Formula;
-import logic.formulas.CompositeFormula;
+// import logic.formulas.CompositeFormula;  // needed if T-NOT b* extension is re-enabled
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.FormulaSign;
-import logic.signedFormulas.SignedFormulaFactory;
+// import logic.signedFormulas.SignedFormulaFactory;  // needed if T-NOT b* extension is re-enabled
 import logic.labelledFormulas.LabelledFormula;
 import logic.labelledFormulas.FormulaLabel;
 import logic.labelledFormulas.ContextFormulaLabel;
@@ -29,39 +29,38 @@ import main.newstrategy.ipl.IPLTracer;
 /**
  * ProofTree específico para IPL que implementa:
  * 1. Reglas de cierre correctas: T A: ci, F A: cj, ci ⪯ cj → ×
- * 2. Monotonicidad explícita: cuando se añade T A : ci, propagar a todos cj donde ci ≤ cj
- * 3. Registro de instancias por grupo de accesibilidad (rinstances) para evitar bucles
+ * 2. Monotonicidad implícita via extendBranch() / b* extension
+ * 3. Registro de instancias de reglas (rinstances) para evitar bucles
  * 4. Aislamiento de etiquetas por rama: cada rama tiene su propio espacio de etiquetas
- * 
- * Basado en el paper: "Free-variable KE tableaux for IPL"
- * 
- * NOTA IMPORTANTE: rinstances es por grupo de accesibilidad (no global).
- * Esto permite que ramas hermanas apliquen la misma regla independientemente
- * (porque generan etiquetas locales diferentes), mientras previene que
- * ramas descendientes repitan aplicaciones de ancestros.
+ *
+ * Basado en el paper: "Free-variable KE tableaux for IPL", Algorithm 1.
+ *
+ * DISEÑO DE rinstances (reglas operacionales):
+ *   Conjunto POR RAMA (per-branch) con búsqueda en ancestros. Cada rama tiene su
+ *   propio conjunto local; wasRuleInstanceApplied recorre la cadena de ancestros.
+ *   Esto garantiza que, dentro de un mismo camino de prueba (rama → ancestros),
+ *   una instancia no se aplica dos veces (prevención de bucles), pero ramas en
+ *   subtrees diferentes pueden aplicar la misma instancia independientemente
+ *   (completitud).  Corresponde al significado correcto de "rinstances" del
+ *   Algorithm 1 del paper: global al camino actual, no a todo el árbol.
  */
 public class IPLProofTree extends OptimizedClassicalProofTree {
 
     private static final IPLTracer tracer = IPLTracer.getInstance();
 
     /**
-     * Registro de instancias de reglas operacionales aplicadas POR RAMA (rinstances).
-     * Similar a pbRinstancesByBranch, tracking por grupo de accesibilidad.
-     * 
-     * Mapa: branchId -> Set de instancias de reglas aplicadas en esa rama
-     * 
-     * Formato de instancia: "regla:premisa1:premisa2:..." (representación String)
-     * 
-     * IMPORTANTE: Cuando una regla genera nuevas etiquetas (como F→1, F¬1),
-     * esas etiquetas son locales a la rama donde se aplica. Por eso rinstances
-     * debe ser por grupo de accesibilidad, no global.
+     * Conjunto local de instancias de reglas operacionales registradas en ESTA rama.
+     * Cada rama tiene su propia copia. wasRuleInstanceApplied() recorre la cadena de
+     * ancestros para determinar si la instancia fue aplicada en el camino actual.
+     * Formato: "regla:premisa1:premisa2:..." (toString de las ls-fórmulas con labels).
      */
-    private Map<String, Set<String>> rinstancesByBranch;
-    
+    private Set<String> localRinstances;
+
     /**
      * Branch ID: identificador único de esta rama.
      * El tronco principal tiene ID "root".
      * Las ramas creadas por bifurcación (PB) reciben IDs únicos.
+     * Se usa para el tracking de etiquetas (isLabelAccessible), pbRinstances y GUI.
      */
     private String branchId;
     
@@ -70,194 +69,99 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
      * Permite determinar qué etiquetas son accesibles en cada rama.
      */
     private Map<String, String> sharedLabelBranchMap;
-    
+
     /**
-     * Registro de instancias de PB aplicadas POR RAMA (tracking por grupo de accesibilidad).
-     * Cada entrada registra que se aplicó PB en una rama específica sobre una combinación
-     * (premisa mayor + regla + auxiliar requerido).
-     * 
-     * Mapa: branchId -> Set de instancias de PB aplicadas en esa rama
-     * 
-     * IMPORTANTE: Se registra en la rama DONDE SE APLICA PB, no donde está la fórmula.
-     * Esto permite que ramas hermanas apliquen PB independientemente, mientras que
-     * previene loops infinitos (ramas descendientes no aplicarán PB de nuevo).
-     */
-    private Map<String, Set<String>> pbRinstancesByBranch;
-    
-    /**
-     * Contador estático para generar branch IDs únicos
+     * Contador estático para generar branch IDs únicos.
      */
     private static AtomicInteger branchIdCounter = new AtomicInteger(0);
 
     public IPLProofTree(SignedFormulaNode aNode) {
         super(aNode);
-        this.branchId = "root"; // El tronco principal
+        this.branchId = "root";
         this.sharedLabelBranchMap = new HashMap<>();
-        this.pbRinstancesByBranch = new HashMap<>();
-        this.rinstancesByBranch = new HashMap<>(); // Nuevo: rinstances por rama
+        this.localRinstances = new HashSet<>();
     }
     
     /**
-     * Constructor para ramas que comparten labelBranchMap, pbRinstancesByBranch y rinstancesByBranch de la raíz
+     * Constructor para ramas hijas: comparten sharedLabelBranchMap pero cada una
+     * tiene su propio conjunto localRinstances vacío (búsqueda vía ancestros).
      */
     private IPLProofTree(SignedFormulaNode aNode,
                          Map<String, String> sharedLabelBranchMap,
-                         Map<String, Set<String>> pbRinstancesByBranch,
-                         Map<String, Set<String>> rinstancesByBranch,
                          String branchId) {
         super(aNode);
-        // ✅ Inicialización defensiva: nunca permitir mapas null
         this.sharedLabelBranchMap = (sharedLabelBranchMap != null) ? sharedLabelBranchMap : new HashMap<>();
-        this.pbRinstancesByBranch = (pbRinstancesByBranch != null) ? pbRinstancesByBranch : new HashMap<>();
-        this.rinstancesByBranch = (rinstancesByBranch != null) ? rinstancesByBranch : new HashMap<>();
+        this.localRinstances = new HashSet<>();
         this.branchId = branchId;
     }
 
     @Override
     protected IProofTree makeInstance(INode aNode) {
-        // Las ramas comparten labelBranchMap, pbRinstancesByBranch y rinstancesByBranch del árbol raíz
-        // pero reciben un nuevo branch ID único
         String newBranchId = "branch_" + branchIdCounter.incrementAndGet();
-        return new IPLProofTree((SignedFormulaNode) aNode, 
-                                sharedLabelBranchMap, pbRinstancesByBranch, 
-                                rinstancesByBranch, newBranchId);
+        return new IPLProofTree((SignedFormulaNode) aNode,
+                                sharedLabelBranchMap, newBranchId);
     }
-    
+
     /**
-     * Verifica si una instancia de regla ya fue aplicada en el grupo de accesibilidad de esta rama.
-     * 
-     * El grupo de accesibilidad de una rama incluye esa rama y todos sus ancestros.
-     * Dos ramas están en el mismo grupo si una es ancestro de la otra.
-     * 
-     * IMPORTANTE: Verifica en la rama actual Y en todas las ancestras (grupo de accesibilidad).
-     * Esto previene loops infinitos cuando ramas descendientes intentan aplicar la misma
-     * regla que ya se aplicó en una rama ancestra.
-     * 
-     * Sin embargo, permite que ramas hermanas (que no comparten ancestros comunes más allá de root)
-     * apliquen la misma regla independientemente, porque generan etiquetas locales diferentes.
-     * 
-     * @param ruleInstance la instancia de regla a verificar (formato: "regla:premisa1:premisa2")
-     * @return true si la regla ya fue aplicada en el grupo de accesibilidad, false en caso contrario
+     * Verifica si una instancia de regla operacional ya fue aplicada en el camino
+     * de prueba actual (esta rama o cualquier ancestro).
+     * Implementa "r ∉ rinstances" del Algorithm 1 (líneas 7 y 10).
+     *
+     * @param ruleInstance la instancia de regla (formato: "regla:premisa1:premisa2")
      */
     public boolean wasRuleInstanceApplied(String ruleInstance) {
-        // Verificar en esta rama
-        Set<String> branchRinstances = rinstancesByBranch.get(branchId);
-        if (branchRinstances != null && branchRinstances.contains(ruleInstance)) {
-            return true;
-        }
-        
-        // Verificar en todas las ramas ancestras (están en el mismo grupo de accesibilidad)
-        IProofTree current = this.getParent();
+        // Buscar en esta rama y en todos los ancestros
+        IPLProofTree current = this;
         while (current != null) {
-            if (current instanceof IPLProofTree) {
-                IPLProofTree iplParent = (IPLProofTree) current;
-                String parentBranchId = iplParent.getBranchId();
-                Set<String> parentRinstances = rinstancesByBranch.get(parentBranchId);
-                if (parentRinstances != null && parentRinstances.contains(ruleInstance)) {
-                    return true;
-                }
+            if (current.localRinstances.contains(ruleInstance)) {
+                return true;
             }
-            current = current.getParent();
+            IProofTree parent = current.getParent();
+            current = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
         }
-        
         return false;
     }
-    
+
     /**
-     * Registra una nueva instancia de regla aplicada en esta rama.
-     * 
-     * IMPORTANTE: Se registra en la rama actual (donde se aplica la regla).
-     * Esto permite que ramas hermanas apliquen la misma regla independientemente,
-     * mientras que previene que ramas descendientes repitan la aplicación.
-     * 
-     * @param ruleInstance la instancia de regla a registrar (formato: "regla:premisa1:premisa2")
+     * Registra una instancia de regla operacional en el conjunto LOCAL de esta rama.
+     * Implementa "rinstances ← rinstances ∪ {r}" del Algorithm 1 (líneas 9, 13, 18).
+     *
+     * @param ruleInstance la instancia de regla (formato: "regla:premisa1:premisa2")
      */
     public void registerRuleInstance(String ruleInstance) {
-        Set<String> branchRinstances = rinstancesByBranch.computeIfAbsent(branchId, k -> new HashSet<>());
-        branchRinstances.add(ruleInstance);
+        localRinstances.add(ruleInstance);
         if (IPLTracer.isEnabled()) {
             tracer.logRinstanceRegistered(ruleInstance);
         }
     }
-    
+
     /**
-     * Obtiene el branch ID de esta rama
+     * No-op: IPL no usa la lista _PBCandidates heredada de ClassicalProofTree.
+     * IPLPBRuleApplicator construye su propia lista de candidatos PB frescos con
+     * findAllCompositeFormulas() cada vez que los necesita, iterando directamente
+     * sobre los nodos del árbol. Mantener sincronizada la lista heredada sería
+     * trabajo innecesario, y el intento de remover fórmulas universales ya removidas
+     * (re-procesadas por Def. 5.6) generaría mensajes DEBUG espurios.
+     */
+    @Override
+    public void removeFromPBCandidates(SignedFormula sf) { }
+
+    /**
+     * Obtiene el branch ID de esta rama (para label tracking y GUI).
      */
     public String getBranchId() {
         return branchId;
     }
-    
+
     /**
-     * Verifica si una instancia de PB ya fue aplicada en el grupo de accesibilidad de esta rama.
-     * 
-     * El grupo de accesibilidad de una rama incluye esa rama y todos sus ancestros.
-     * Dos ramas están en el mismo grupo si una es ancestro de la otra.
-     * 
-     * IMPORTANTE: Verifica en la rama actual Y en todas las ancestras (grupo de accesibilidad).
-     * Esto previene loops infinitos cuando ramas descendientes intentan aplicar PB sobre
-     * la misma combinación que ya se aplicó en una rama ancestra.
-     * 
-     * Sin embargo, permite que ramas hermanas (que no comparten ancestros comunes más allá de root)
-     * apliquen PB sobre la misma combinación independientemente.
-     * 
-     * @param pbInstance la instancia de PB a verificar (formato: "PB:regla:premisaMayor:auxiliarRequerido")
-     * @return true si PB ya fue aplicado en el grupo de accesibilidad, false en caso contrario
+     * Returns an unmodifiable view of rule instances registered in this branch only.
+     * For the full set along the current path use wasRuleInstanceApplied().
+     * Used by the GUI / HTML export.
      */
-    public boolean wasPBRuleInstanceAppliedInAccessibilityGroup(String pbInstance) {
-        // Verificar en esta rama
-        Set<String> branchPbRinstances = pbRinstancesByBranch.get(branchId);
-        if (branchPbRinstances != null && branchPbRinstances.contains(pbInstance)) {
-            return true;
-        }
-        
-        // Verificar en todas las ramas ancestras (están en el mismo grupo de accesibilidad)
-        IProofTree current = this.getParent();
-        while (current != null) {
-            if (current instanceof IPLProofTree) {
-                IPLProofTree iplParent = (IPLProofTree) current;
-                String parentBranchId = iplParent.getBranchId();
-                Set<String> parentPbRinstances = pbRinstancesByBranch.get(parentBranchId);
-                if (parentPbRinstances != null && parentPbRinstances.contains(pbInstance)) {
-                    return true;
-                }
-            }
-            current = current.getParent();
-        }
-        
-        return false;
+    public Set<String> getRinstances() {
+        return java.util.Collections.unmodifiableSet(localRinstances);
     }
-    
-    /**
-     * Registra una nueva instancia de PB aplicada en una rama específica.
-     * 
-     * IMPORTANTE: Se registra en la rama DONDE SE APLICA PB (targetBranchId),
-     * no donde está la fórmula. Esto permite que:
-     * - Ramas hermanas apliquen PB sobre la misma combinación independientemente
-     *   (no comparten el mismo branchId, así que no ven el registro de la otra)
-     * - Ramas descendientes no apliquen PB de nuevo (están en el mismo grupo de accesibilidad,
-     *   así que verán el registro en la rama ancestra)
-     * 
-     * @param pbInstance la instancia de PB a registrar (formato: "PB:regla:premisaMayor:auxiliarRequerido")
-     * @param targetBranchId la rama donde registrar (donde se aplicó PB)
-     */
-    public void registerPBRuleInstance(String pbInstance, String targetBranchId) {
-        Set<String> branchPbRinstances = pbRinstancesByBranch.computeIfAbsent(targetBranchId, k -> new HashSet<>());
-        branchPbRinstances.add(pbInstance);
-        if (IPLTracer.isEnabled()) {
-            tracer.logRinstanceRegistered("PB:" + pbInstance);
-        }
-    }
-    
-    /**
-     * Registra una nueva instancia de PB aplicada en esta rama.
-     * Versión conveniente que registra en la rama actual.
-     * 
-     * @param pbInstance la instancia de PB a registrar
-     */
-    public void registerPBRuleInstance(String pbInstance) {
-        registerPBRuleInstance(pbInstance, branchId);
-    }
-    
+
     /**
      * Registra una etiqueta con el branch ID actual.
      * @return true si la etiqueta era nueva (no estaba registrada antes)
@@ -502,6 +406,61 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
     
     /**
+     * Scans all formula pairs in b* for contradictions of the form T A:ci, F A:cj where ci ⪯ cj.
+     * Called after the main processing loop to catch contradictions that were not triggered
+     * during incremental adds (e.g., when both contradicting formulas exist only in ancestors).
+     *
+     * @return true if a contradiction was found and the branch was closed
+     */
+    public boolean checkBStarForContradiction() {
+        return checkBStarForContradiction(extendBranch());
+    }
+
+    /**
+     * Same as {@link #checkBStarForContradiction()} but uses an already-computed b*.
+     * Use this overload when b* was computed for another purpose (e.g., completeness
+     * checking) to avoid calling {@link #extendBranch()} twice.
+     *
+     * @param bStar the extended branch, as returned by {@link #extendBranch()}
+     * @return true if a contradiction was found and the branch was closed
+     */
+    public boolean checkBStarForContradiction(Set<SignedFormula> bStar) {
+        if (isLocallyClosed()) return true;
+
+        for (SignedFormula sf1 : bStar) {
+            if (!sf1.getSign().equals(IPLSigns.TRUE)) continue;
+            if (!(sf1 instanceof LabelledFormula)) continue;
+
+            LabelledFormula lf1 = (LabelledFormula) sf1;
+            FormulaLabel label1 = lf1.getLabel();
+            if (!isLabelAccessible(label1)) continue;
+
+            Context context = getContextFromLabel(label1);
+            if (context == null) continue;
+
+            for (SignedFormula sf2 : bStar) {
+                if (!sf2.getSign().equals(IPLSigns.FALSE)) continue;
+                if (!(sf2 instanceof LabelledFormula)) continue;
+                if (!sf2.getFormula().equals(sf1.getFormula())) continue;
+
+                LabelledFormula lf2 = (LabelledFormula) sf2;
+                FormulaLabel label2 = lf2.getLabel();
+                if (!isLabelAccessible(label2)) continue;
+
+                if (isLowerOrEqual(context, label1, label2)) {
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logInfo("checkBStarForContradiction: found T " + sf1.getFormula()
+                                + " " + label1 + " vs F " + sf2.getFormula() + " " + label2);
+                    }
+                    setLocallyClosed(true);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Obtiene el Context desde una FormulaLabel (si es ContextFormulaLabel)
      */
     private Context getContextFromLabel(FormulaLabel label) {
@@ -626,17 +585,20 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
     
     /**
-     * ✅ EXTENSIÓN b* IMPLÍCITA: Calcula la extensión de la rama actual según Definition 5.3 del paper.
-     * 
-     * La extensión b* de una rama b es el conjunto de ls-formulas que incluye:
-     * 1. Todas las fórmulas en b
-     * 2. T A: cj ∈ b*, para cada cj ∈ Cb tal que ci ⪯b cj y T A: ci está en b
-     * 3. F A: ci ∈ b*, para cada ci ∈ Cb tal que ci ⪯b cj y F A: cj está en b
-     * 4. F A: cj ∈ b*, para cada cj ∈ Cb tal que ci ⪯b cj y F A: xi está en b
-     * 
-     * Este método calcula b* dinámicamente SIN agregar las fórmulas físicamente al árbol.
-     * Esto previene la explosión de fórmulas y los loops infinitos causados por monotonicidad explícita.
-     * 
+     * Calcula la extension b* de la rama actual (Definition 5.3 + extension de implementacion).
+     *
+     * Definition 5.3 del paper define b* con estas condiciones ("nothing else is in b*"):
+     *   1. Todas las formulas en b
+     *   2. T A:cj in b*, para cada cj tal que ci <= cj y T A:ci in b  (monotonia T ascendente)
+     *   3. F A:ci in b*, para cada ci tal que ci <= cj y F A:cj in b  (monotonia F descendente)
+     *   4. (labels variables, Table 1 — no aplica en Table 2)
+     *
+     * Extension de implementacion (NOT en Definition 5.3, justificada por Definition 5.6):
+     *   5. Si T-NOT-A:ci in b, entonces F A:cj in b* para cada cj >= ci.
+     *      Permite deteccion de cierre anticipada sin esperar la aplicacion fisica de T-NOT.
+     *
+     * Este metodo calcula b* dinamicamente SIN agregar formulas fisicamente al arbol.
+     *
      * @return Set de SignedFormula que representa b*
      */
     public Set<SignedFormula> extendBranch() {
@@ -746,45 +708,46 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         // Nota: Esta implementación usa Table 2 (sin variables), así que esta regla no aplica
         // Si se implementaran variables en el futuro, se agregaría aquí
         
-        // Regla 5 (Definition 5.6 línea 670): Si T¬A: ci ∈ b, entonces F A: cj ∈ b* para cada cj >= ci
-        // Esta es la regla que hace que las conclusiones de T¬ existan implícitamente en b*
-        // Crear un factory temporal para crear las fórmulas signadas
-        SignedFormulaFactory tempFactory = new SignedFormulaFactory();
-        
-        for (SignedFormula sf : formulasInB) {
-            if (sf.getSign().equals(IPLSigns.TRUE) && sf instanceof LabelledFormula) {
-                LabelledFormula lf = (LabelledFormula) sf;
-                Formula formula = lf.getFormula();
-                
-                // Verificar si es T¬A (negación)
-                if (formula instanceof CompositeFormula) {
-                    CompositeFormula comp = (CompositeFormula) formula;
-                    if (comp.getConnective().equals(IPLConnectives.NOT)) {
-                        // Es T¬A
-                        FormulaLabel ci = lf.getLabel();
-                        if (ci == null || !isLabelAccessible(ci)) {
-                            continue;
-                        }
-                        
-                        // Para cada cj >= ci, agregar F A: cj a b*
-                        Formula innerA = comp.getImmediateSubformulas().get(0);
-                        for (FormulaLabel cj : constantLabels) {
-                            if (!isLabelAccessible(cj)) {
-                                continue;
-                            }
-                            
-                            if (context.isLowerOrEqualTo(ci, cj)) {
-                                // Crear F A: cj implícitamente en b*
-                                // NO se agrega físicamente a b, solo está en b*
-                                SignedFormula innerSigned = tempFactory.createSignedFormula(IPLSigns.FALSE, innerA);
-                                LabelledFormula tneg_derived = new LabelledFormula(cj, innerSigned);
-                                bStar.add(tneg_derived);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Extension de implementacion (Definition 5.6, NOT Definition 5.3):
+        // Si T-NOT-A: ci in b, entonces F A: cj in b* para cada cj >= ci.
+        // Definition 5.3 dice "nothing else is in b*" y no incluye este caso.
+        // Lo agregamos aqui porque Definition 5.6 requiere que T-NOT-A:ci este
+        // completamente analizada solo cuando F A:cj in b* para todo cj >= ci.
+        // Anticipar esto permite deteccion de cierre mas temprana sin generar
+        // F A:cj fisicamente primero. T-NOT genera esas formulas por re-seleccion
+        // via el chequeo de Def. 5.6 en selectUnanalyzedFormula.
+        //
+        // COMENTADO: esta extension va mas alla de Definition 5.3.
+        // El sistema sigue siendo correcto sin ella: T-NOT re-genera F A:cj en la
+        // siguiente iteracion via Def. 5.6, logrando el mismo cierre un paso despues.
+        //
+        // SignedFormulaFactory tempFactory = new SignedFormulaFactory();
+        // for (SignedFormula sf : formulasInB) {
+        //     if (sf.getSign().equals(IPLSigns.TRUE) && sf instanceof LabelledFormula) {
+        //         LabelledFormula lf = (LabelledFormula) sf;
+        //         Formula formula = lf.getFormula();
+        //         if (formula instanceof CompositeFormula) {
+        //             CompositeFormula comp = (CompositeFormula) formula;
+        //             if (comp.getConnective().equals(IPLConnectives.NOT)) {
+        //                 FormulaLabel ci = lf.getLabel();
+        //                 if (ci == null || !isLabelAccessible(ci)) {
+        //                     continue;
+        //                 }
+        //                 Formula innerA = comp.getImmediateSubformulas().get(0);
+        //                 for (FormulaLabel cj : constantLabels) {
+        //                     if (!isLabelAccessible(cj)) {
+        //                         continue;
+        //                     }
+        //                     if (context.isLowerOrEqualTo(ci, cj)) {
+        //                         SignedFormula innerSigned = tempFactory.createSignedFormula(IPLSigns.FALSE, innerA);
+        //                         LabelledFormula tneg_derived = new LabelledFormula(cj, innerSigned);
+        //                         bStar.add(tneg_derived);
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
         
         return bStar;
     }

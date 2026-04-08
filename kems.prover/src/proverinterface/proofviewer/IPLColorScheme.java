@@ -40,6 +40,18 @@ public class IPLColorScheme {
         return "default";
     }
 
+    /** Returns a category string suitable for the JSON export and D3 coloring. */
+    public static String getRuleCategory(String ruleName) {
+        if (ruleName == null) return "default";
+        String r = ruleName.toUpperCase();
+        if (r.contains("CLOSE"))        return "CLOSURE";
+        if (r.contains("PB"))           return "PB";
+        if (r.contains("PROPAGAT"))     return "PROPAGATION";
+        if (isTwoPremise(r))            return "TWO_PREMISE";
+        if (isOnePremise(r))            return "ONE_PREMISE";
+        return "default";
+    }
+
     private static boolean isOnePremise(String r) {
         return r.contains("T_AND") || r.contains("F_OR")
             || r.contains("T_NOT") || r.contains("F_NOT")

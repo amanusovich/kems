@@ -77,7 +77,10 @@ public class ExtendedProof implements IProof {
      */
     public void setExtendedProofTree(ExtendedProofTree tree) {
         this.extendedProofTree = tree;
+    }
 
+    public IProof getOriginalProof() {
+        return originalProof;
     }
 
     /*

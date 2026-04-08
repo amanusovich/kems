@@ -442,6 +442,10 @@ public class ProofViewer extends JFrame implements ActionListener,
 		return fullViewProofPane;
 	}
 
+	protected InteractiveProofPane getInteractiveProofPane() {
+		return interactiveProofPane;
+	}
+
 	public Dimension getPaneSize() {
 		return paneSize;
 	}
