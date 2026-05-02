@@ -305,129 +305,87 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
     
     /**
-     * ✅ EXTENSIÓN b* IMPLÍCITA: Detecta contradicciones según las reglas de cierre IPL:
-     * 1) T A: ci, F A: cj, ci ⪯ cj → ×
-     * 
-     * Ahora busca fórmulas en b* (extensión de la rama) en lugar de solo en b.
-     * Esto es crucial para que el sistema funcione correctamente sin monotonicidad explícita.
+     * Detecta contradicciones según la regla de cierre IPL (Lemma 5.5):
+     *   T A:ci, F A:cj, ci ⪯ cj → ×
+     *
+     * La nueva fórmula ya está en b (insertada por super.addLast antes de updateMultimap).
+     * Se busca la fórmula de signo opuesto directamente en b físico (rama + ancestros),
+     * aplicando la relación ⪯ sobre las etiquetas constantes.
+     *
+     * Esto es equivalente a chequear b* porque toda contradicción en b* se corresponde
+     * con una contradicción en b via la transitividad de ⪯ (ver IMPLEMENTACION_IPL.md §5).
+     * Iterar b directamente es O(n) en lugar de O(n²) de calcular b* completo.
      */
     private boolean detectIPLContradiction(SignedFormulaNode aNode) {
         SignedFormula newSf = (SignedFormula) aNode.getContent();
-        FormulaLabel newLabel = newSf.getLabel();
-        Formula newFormula = newSf.getFormula();
+        if (!(newSf instanceof LabelledFormula)) return false;
+
+        LabelledFormula newLf = (LabelledFormula) newSf;
+        FormulaLabel newLabel = newLf.getLabel();
+        Formula newFormula = newLf.getFormula();
         FormulaSign newSign = newSf.getSign();
-        
-        // Obtener el Context para verificar relaciones de orden
+
+        if (newLabel == null || !isLabelAccessible(newLabel)) return false;
+
         Context context = getContextFromLabel(newLabel);
-        if (context == null) {
-            return false; // Sin Context, no podemos verificar relaciones de orden
-        }
-        
-        // ✅ Calcular b* (extensión de la rama)
-        Set<SignedFormula> bStar = extendBranch();
-        
-        // Regla 1: T A: ci, F A: cj, ci ⪯ cj → ×
-        if (newSign.equals(IPLSigns.TRUE)) {
-            // Buscar todas las instancias de F A en b*
-            List<SignedFormula> oppositeFormulas = bStar.stream()
-                .filter(sf -> sf.getSign().equals(IPLSigns.FALSE) && 
-                             sf.getFormula().equals(newFormula) &&
-                             sf instanceof LabelledFormula)
-                .collect(java.util.stream.Collectors.toList());
-                
-            if (!oppositeFormulas.isEmpty()) {
-                boolean newLabelAccessible = isLabelAccessible(newLabel);
-                if (!newLabelAccessible) {
-                    return false;
-                }
-                
-                // Verificar cada instancia de F A para ver si alguna cumple ci ⪯ cj
-                for (SignedFormula oppositeSigned : oppositeFormulas) {
-                    FormulaLabel oppositeLabel = oppositeSigned.getLabel();
-                    
-                    boolean oppositeLabelAccessible = isLabelAccessible(oppositeLabel);
-                    if (!oppositeLabelAccessible) {
-                        continue; // Saltar esta instancia si no es accesible
+        if (context == null) return false;
+
+        // T A:ci (nueva) → buscar F A:cj en b con ci ⪯ cj
+        // F A:cj (nueva) → buscar T A:ci en b con ci ⪯ cj
+        FormulaSign oppositeSign = newSign.equals(IPLSigns.TRUE) ? IPLSigns.FALSE : IPLSigns.TRUE;
+
+        IPLProofTree current = this;
+        while (current != null) {
+            IProofTreeVeryBasicIterator it = current.getTopDownIterator();
+            while (it.hasNext()) {
+                INode node = it.next();
+                if (!(node instanceof SignedFormulaNode)) continue;
+                SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
+                if (!sf.getSign().equals(oppositeSign)) continue;
+                if (!sf.getFormula().equals(newFormula)) continue;
+                if (!(sf instanceof LabelledFormula)) continue;
+
+                FormulaLabel label = ((LabelledFormula) sf).getLabel();
+                if (label == null || !isLabelAccessible(label)) continue;
+
+                // ci = etiqueta de la fórmula T, cj = etiqueta de la fórmula F
+                FormulaLabel ciLabel = newSign.equals(IPLSigns.TRUE) ? newLabel : label;
+                FormulaLabel cjLabel = newSign.equals(IPLSigns.TRUE) ? label : newLabel;
+
+                if (isLowerOrEqual(context, ciLabel, cjLabel)) {
+                    if (IPLTracer.isEnabled()) {
+                        tracer.logClosure(newFormula + " " + ciLabel,
+                                newFormula + " " + cjLabel,
+                                ciLabel + " ⪯ " + cjLabel);
                     }
-                    
-                    // Verificar si ci ⪯ cj (newLabel ⪯ oppositeLabel)
-                    boolean isLowerOrEqualResult = isLowerOrEqual(context, newLabel, oppositeLabel);
-                    if (isLowerOrEqualResult) {
-                        if (IPLTracer.isEnabled()) {
-                            tracer.logClosure(newFormula + " " + newLabel,
-                                    newFormula + " " + oppositeLabel,
-                                    newLabel + " ⪯ " + oppositeLabel);
-                        }
-                        return true;
-                    }
+                    return true;
                 }
             }
+            IProofTree parent = current.getParent();
+            current = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
         }
-        
-        if (newSign.equals(IPLSigns.FALSE)) {
-            // Buscar todas las instancias de T A en b*
-            List<SignedFormula> oppositeFormulas = bStar.stream()
-                .filter(sf -> sf.getSign().equals(IPLSigns.TRUE) && 
-                             sf.getFormula().equals(newFormula) &&
-                             sf instanceof LabelledFormula)
-                .collect(java.util.stream.Collectors.toList());
-                
-            if (!oppositeFormulas.isEmpty()) {
-                boolean newLabelAccessible = isLabelAccessible(newLabel);
-                if (!newLabelAccessible) {
-                    return false;
-                }
-                
-                // Verificar cada instancia de T A para ver si alguna cumple ci ⪯ cj
-                for (SignedFormula oppositeSigned : oppositeFormulas) {
-                    FormulaLabel oppositeLabel = oppositeSigned.getLabel();
-                    
-                    boolean oppositeLabelAccessible = isLabelAccessible(oppositeLabel);
-                    if (!oppositeLabelAccessible) {
-                        continue; // Saltar esta instancia si no es accesible
-                    }
-                    
-                    // Verificar si ci ⪯ cj (oppositeLabel ⪯ newLabel)
-                    boolean isLowerOrEqualResult = isLowerOrEqual(context, oppositeLabel, newLabel);
-                    if (isLowerOrEqualResult) {
-                        if (IPLTracer.isEnabled()) {
-                            tracer.logClosure(newFormula + " " + oppositeLabel,
-                                    newFormula + " " + newLabel,
-                                    oppositeLabel + " ⪯ " + newLabel);
-                        }
-                        return true;
-                    }
-                }
-            }
-        }
-        
-        
         return false;
     }
     
     /**
-     * Scans all formula pairs in b* for contradictions of the form T A:ci, F A:cj where ci ⪯ cj.
-     * Called after the main processing loop to catch contradictions that were not triggered
-     * during incremental adds (e.g., when both contradicting formulas exist only in ancestors).
+     * Chequea contradicciones de la forma T A:ci, F A:cj, ci ⪯ cj iterando directamente
+     * sobre b físico (rama + ancestros) — Lemma 5.5.
      *
-     * @return true if a contradiction was found and the branch was closed
-     */
-    public boolean checkBStarForContradiction() {
-        return checkBStarForContradiction(extendBranch());
-    }
-
-    /**
-     * Same as {@link #checkBStarForContradiction()} but uses an already-computed b*.
-     * Use this overload when b* was computed for another purpose (e.g., completeness
-     * checking) to avoid calling {@link #extendBranch()} twice.
+     * Llamado al final de cada iteración del loop para capturar contradicciones que no
+     * fueron detectadas incrementalmente (e.g., cuando ambas fórmulas están solo en ancestros).
      *
-     * @param bStar the extended branch, as returned by {@link #extendBranch()}
-     * @return true if a contradiction was found and the branch was closed
+     * Aunque Lemma 5.5 está enunciado sobre b*, es suficiente iterar b físico:
+     * la monotonía de Def. 5.3 garantiza que toda contradicción en b* tiene testigos
+     * T A:ci y F A:cj con ci ⪯ cj en b (por transitividad de ⪯).
+     *
+     * @return true si se encontró una contradicción y la rama fue marcada cerrada
      */
-    public boolean checkBStarForContradiction(Set<SignedFormula> bStar) {
+    public boolean checkPhysicalBForContradiction() {
         if (isLocallyClosed()) return true;
 
-        for (SignedFormula sf1 : bStar) {
+        List<SignedFormula> physicalB = collectPhysicalFormulas();
+
+        for (SignedFormula sf1 : physicalB) {
             if (!sf1.getSign().equals(IPLSigns.TRUE)) continue;
             if (!(sf1 instanceof LabelledFormula)) continue;
 
@@ -438,18 +396,17 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
             Context context = getContextFromLabel(label1);
             if (context == null) continue;
 
-            for (SignedFormula sf2 : bStar) {
+            for (SignedFormula sf2 : physicalB) {
                 if (!sf2.getSign().equals(IPLSigns.FALSE)) continue;
                 if (!(sf2 instanceof LabelledFormula)) continue;
                 if (!sf2.getFormula().equals(sf1.getFormula())) continue;
 
-                LabelledFormula lf2 = (LabelledFormula) sf2;
-                FormulaLabel label2 = lf2.getLabel();
+                FormulaLabel label2 = ((LabelledFormula) sf2).getLabel();
                 if (!isLabelAccessible(label2)) continue;
 
                 if (isLowerOrEqual(context, label1, label2)) {
                     if (IPLTracer.isEnabled()) {
-                        tracer.logInfo("checkBStarForContradiction: found T " + sf1.getFormula()
+                        tracer.logInfo("Contradiction: T " + sf1.getFormula()
                                 + " " + label1 + " vs F " + sf2.getFormula() + " " + label2);
                     }
                     setLocallyClosed(true);
@@ -473,6 +430,29 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     // ✅ ELIMINADO: propagateRetroactiveMonotonicity()
     // Ya no se necesita porque la monotonicidad se maneja implícitamente vía extendBranch()
     
+    /**
+     * Recolecta todas las fórmulas físicas de b (rama actual + ancestros), sin duplicados.
+     * Usado por detectIPLContradiction y checkPhysicalBForContradiction para iterar b directamente.
+     */
+    private List<SignedFormula> collectPhysicalFormulas() {
+        List<SignedFormula> result = new ArrayList<>();
+        Set<SignedFormula> seen = new HashSet<>();
+        IPLProofTree current = this;
+        while (current != null) {
+            IProofTreeVeryBasicIterator it = current.getTopDownIterator();
+            while (it.hasNext()) {
+                INode node = it.next();
+                if (node instanceof SignedFormulaNode) {
+                    SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
+                    if (seen.add(sf)) result.add(sf);
+                }
+            }
+            IProofTree parent = current.getParent();
+            current = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
+        }
+        return result;
+    }
+
     /**
      * Verifica si label1 ⪯ label2 en el contexto dado
      */

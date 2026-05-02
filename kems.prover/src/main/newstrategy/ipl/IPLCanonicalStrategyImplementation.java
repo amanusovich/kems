@@ -205,9 +205,11 @@ public class IPLCanonicalStrategyImplementation {
      * formula's required consequences are already present in b*.
      */
     private boolean checkBranchDone(IPLProofTree b) {
+        // Closure check: iterate physical b directly (Lemma 5.5, equivalent to b* check via ⪯ transitivity).
+        if (b.checkPhysicalBForContradiction()) return true;
+        // Completeness check: requires b* (Definition 5.6 conditions reference b*).
         Set<SignedFormula> bStar = b.extendBranch();
-        // Short-circuit: if a contradiction is found, mark closed and stop.
-        return b.checkBStarForContradiction(bStar) || isCompletePerDef56(b, bStar);
+        return isCompletePerDef56(b, bStar);
     }
 
     /**
@@ -380,37 +382,39 @@ public class IPLCanonicalStrategyImplementation {
     }
 
     /**
-     * Line 6: Selects a formula φ in branch b which is not completely analyzed.
-     * Returns null if all formulas are analyzed (no candidates remain).
-     *
-     * Selection is strictly from the physical branch b — no b* materialization.
-     * Strategy: 1-premise candidates are prioritized over 2-premise ones.
-     *
-     * @param failedFormulas formulas that failed to apply any rule this round
-     */
-    /**
      * Algorithm 1, line 6: "select a φ in b which is not completely analyzed in b".
      *
-     * Per Definition 5.6, a formula is "not completely analyzed" if its required
-     * consequences are not yet in b*. This check applies to ALL formulas:
+     * Selection is decided exclusively by Definition 5.6: a formula is a candidate
+     * iff its Def. 5.6 condition is NOT yet satisfied in b*. The internal
+     * NOT_ANALYSED/ANALYSED flag is no longer consulted to decide candidacy —
+     * it is kept only as an optimisation signal for {@link IPLPBRuleApplicator}
+     * (which uses it to detect "no work pending" before invoking PB).
      *
-     * - NOT_ANALYSED formulas: always candidates, EXCEPT existential ones (F¬, F→)
-     *   whose Def. 5.6 condition is already satisfied — those are marked ANALYSED
-     *   and skipped (Algorithm 1 would never select them since they are already
-     *   completely analyzed).
+     * Consequences:
+     * - Universal formulas (T(A→B), T(¬A)): re-selected automatically whenever a
+     *   new accessible world makes Def. 5.6 fail again — same behaviour as before.
+     * - Existential formulas (F(A→B), F(¬A)): pre-checked and discarded as soon
+     *   as Def. 5.6 is satisfied — same behaviour as before.
+     * - T∧, F∨, T∨, F∧: now also pre-checked. If their condition was already
+     *   satisfied indirectly (e.g. via monotonicity or another rule) the formula
+     *   is discarded without firing its rule. If it later becomes unsatisfied
+     *   again (e.g. T∨ whose only disjunct witness was on a sibling branch) it
+     *   is reconsidered, avoiding unnecessary PB invocations.
      *
-     * - ANALYSED universal formulas (T(A→B), T(¬A)): re-included when their
-     *   Def. 5.6 condition fails again due to new accessible worlds appearing.
+     * Whenever a formula is discarded because Def. 5.6 already holds, we mark
+     * it ANALYSED so that {@link IPLPBRuleApplicator#hasUnanalysedFormulas} can
+     * recognise that no operational work remains.
      *
-     * Both cases implement the same principle: select only what is "not completely
-     * analyzed". The b* computation is lazy (shared across both cases).
+     * @param failedFormulas formulas that failed to apply any rule this round
+     *                       (cleared whenever any rule fires, see processOpenBranch)
      */
     private SignedFormula selectUnanalyzedFormula(IPLProofTree b, Set<SignedFormula> failedFormulas) {
         SignedFormula onePremiseCandidate = null;
         SignedFormula twoPremiseCandidate = null;
 
-        // Lazily computed once needed (shared for both universal re-check and
-        // existential pre-check).
+        // b* and branchLabels are computed lazily on first need and reused for the
+        // entire scan. extendBranch() is O(n); doing it once per selectUnanalyzedFormula
+        // call keeps per-iteration cost bounded.
         Set<SignedFormula> bStar = null;
         java.util.Set<FormulaLabel> branchLabels = null;
 
@@ -425,49 +429,31 @@ public class IPLCanonicalStrategyImplementation {
             if (failedFormulas.contains(sf)) continue;
             if (isTopOrBottom(sf)) continue;
             if (!(sf.getFormula() instanceof CompositeFormula)) continue;
+            if (!(sf instanceof LabelledFormula)) continue;
+            LabelledFormula lf = (LabelledFormula) sf;
+            if (!(lf.getLabel() instanceof ContextFormulaLabel)) continue;
 
-            if (sfNode.getState() == SignedFormulaNodeState.ANALYSED) {
-                // Re-include universal (∀-type) formulas only if Def. 5.6 is not yet satisfied.
-                if (!isUniversalFormula(sf)) continue;
-                if (!(sf instanceof LabelledFormula)) continue;
-                LabelledFormula lf = (LabelledFormula) sf;
-                if (!(lf.getLabel() instanceof ContextFormulaLabel)) continue;
-                if (bStar == null) {
-                    bStar = b.extendBranch();
-                    branchLabels = collectBranchLabels(bStar);
-                }
-                CompositeFormula comp = (CompositeFormula) sf.getFormula();
-                ContextFormulaLabel ci = (ContextFormulaLabel) lf.getLabel();
-                logic.labelledFormulas.Context ctx = ci.getContext();
-                if (checkDef56Condition(sf, comp, ci, ctx, bStar, branchLabels)) continue;
-                // Def. 5.6 not satisfied → not completely analyzed → include
-
-            } else {
-                // NOT_ANALYSED: apply Def. 5.6 pre-check for existential formulas (F¬, F→).
-                // Per Algorithm 1 line 6: if the formula is already completely analyzed,
-                // it must not be selected — mark ANALYSED and skip it.
-                // (Existential conditions are monotone: once satisfied they stay satisfied.)
-                if (isExistentialFormula(sf) && sf instanceof LabelledFormula) {
-                    LabelledFormula lf = (LabelledFormula) sf;
-                    if (lf.getLabel() instanceof ContextFormulaLabel) {
-                        if (bStar == null) {
-                            bStar = b.extendBranch();
-                            branchLabels = collectBranchLabels(bStar);
-                        }
-                        CompositeFormula comp = (CompositeFormula) sf.getFormula();
-                        ContextFormulaLabel ci = (ContextFormulaLabel) lf.getLabel();
-                        logic.labelledFormulas.Context ctx = ci.getContext();
-                        if (checkDef56Condition(sf, comp, ci, ctx, bStar, branchLabels)) {
-                            // Already completely analyzed — mark ANALYSED and skip
-                            sfNode.setState(SignedFormulaNodeState.ANALYSED);
-                            if (IPLTracer.isEnabled())
-                                tracer.logInfo("Def.5.6 pre-satisfied, marking ANALYSED: " + sf);
-                            continue;
-                        }
-                    }
-                }
+            if (bStar == null) {
+                bStar = b.extendBranch();
+                branchLabels = collectBranchLabels(bStar);
             }
 
+            CompositeFormula comp = (CompositeFormula) sf.getFormula();
+            ContextFormulaLabel ci = (ContextFormulaLabel) lf.getLabel();
+            logic.labelledFormulas.Context ctx = ci.getContext();
+
+            if (checkDef56Condition(sf, comp, ci, ctx, bStar, branchLabels)) {
+                // Def. 5.6 already satisfied — formula is "completely analyzed".
+                // Mark ANALYSED so PB last-resort can recognise no work remains.
+                if (sfNode.getState() == SignedFormulaNodeState.NOT_ANALYSED) {
+                    sfNode.setState(SignedFormulaNodeState.ANALYSED);
+                    if (IPLTracer.isEnabled())
+                        tracer.logInfo("Def.5.6 already satisfied, marking ANALYSED: " + sf);
+                }
+                continue;
+            }
+
+            // Def. 5.6 fails → formula is not completely analyzed → candidate.
             if (onePremiseCandidate == null && hasOnePremiseRule(sf)) {
                 onePremiseCandidate = sf;
                 if (IPLTracer.isEnabled()) tracer.logInfo("1-premise candidate: " + sf);
@@ -486,20 +472,6 @@ public class IPLCanonicalStrategyImplementation {
         return twoPremiseCandidate;
     }
 
-    /**
-     * Returns true for ∃-type (existential) formulas whose Def. 5.6 condition
-     * asserts existence of a witness world: F(¬A):ci and F(A→B):ci.
-     * Once their condition is satisfied it stays satisfied (monotone), so they
-     * only need to be checked once at selection time.
-     */
-    private boolean isExistentialFormula(SignedFormula sf) {
-        if (sf == null || !"F".equals(sf.getSign().toString())) return false;
-        if (!(sf.getFormula() instanceof CompositeFormula)) return false;
-        CompositeFormula comp = (CompositeFormula) sf.getFormula();
-        return comp.getConnective().equals(IPLConnectives.NOT)
-            || comp.getConnective().equals(IPLConnectives.IMPLIES);
-    }
-
     /** Collects the set of labels that appear in bStar (for Def. 5.6 checks). */
     private java.util.Set<FormulaLabel> collectBranchLabels(Set<SignedFormula> bStar) {
         java.util.Set<FormulaLabel> labels = new java.util.LinkedHashSet<>();
@@ -509,19 +481,6 @@ public class IPLCanonicalStrategyImplementation {
             }
         }
         return labels;
-    }
-
-    /**
-     * Returns true for ∀-type (universal/γ) formulas whose Def. 5.6 condition
-     * quantifies over all accessible worlds: T(A→B):ci and T(¬A):ci.
-     * These can become "not completely analyzed" again when new worlds appear.
-     */
-    private boolean isUniversalFormula(SignedFormula sf) {
-        if (sf == null || !sf.getSign().equals(IPLSigns.TRUE)) return false;
-        if (!(sf.getFormula() instanceof CompositeFormula)) return false;
-        CompositeFormula comp = (CompositeFormula) sf.getFormula();
-        return comp.getConnective().equals(IPLConnectives.IMPLIES)
-            || comp.getConnective().equals(IPLConnectives.NOT);
     }
 
     /**
