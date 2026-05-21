@@ -75,7 +75,8 @@ public class ProblemEditor extends JFrame implements ActionListener, WindowListe
 		{"LEM: P v ~P (NOT valid in IPL)", "F +(P -P) c0", "Not valid"},
 		{"DN Elim: ~~A->A (NOT valid in IPL)", "F ->(-(-A) A) c0", "Not valid"},
 		{"Peirce: ((p->q)->p)->p (NOT valid)", "F ->(->(->(p q) p) p) c0", "Not valid"},
-		{"Complex DN+LEM (NOT valid)", "F ->(->(->(-(-p) p) +(p -p)) +(-p -(-p))) c0", "Not valid"},
+		{"Peirce variant: ((q->p)->p)->p (NOT valid)", "F ->(->(->(q p) p) p) c0", "Not valid"},
+		{"Scott axiom: ((~~p->p)->(pv~p))->(~pv~~p) (NOT valid)", "F ->(->(->(-(-p) p) +(p -p)) +(-p -(-p))) c0", "Not valid"},
 	};
 
 	private File editingFile;

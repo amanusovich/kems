@@ -1371,10 +1371,11 @@ public class IPLRulesComprehensiveTest {
     }
 
     @Test
-    public void testComplexDoubleNegationAndExcludedMiddle() {
-        System.out.println("\n=== TEST: Fórmula compleja con doble negación y tercio excluido ===");
+    public void testScottAxiom_NotValidInIPL() {
+        System.out.println("\n=== TEST: Refutación del axioma de Scott ===");
         System.out.println("Fórmula: F ((¬¬p → p) → (p ∨ ¬p)) → (¬p ∨ ¬¬p) : c0");
-        System.out.println("Esta fórmula combina doble negación y tercio excluido");
+        System.out.println("Cuarta refutación de la Fig. 3 del paper [labeled-ke-ipl].");
+        System.out.println("El axioma de Scott no es válido en IPL.");
 
         try {
             Context context = new Context();
@@ -1390,11 +1391,42 @@ public class IPLRulesComprehensiveTest {
             System.out.println("\n📊 Árbol resultado:");
             System.out.println(treeOutput);
 
-            assertFalse(proof.isClosed());
+            assertFalse("El axioma de Scott NO debe estar cerrado en IPL", proof.isClosed());
 
         } catch (Exception e) {
             e.printStackTrace();
-            fail("Error en test fórmula compleja: " + e.getMessage());
+            fail("Error en test axioma de Scott: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testPeirceVariantQP_NotValidInIPL() {
+        System.out.println("\n=== TEST: Refutación de la variante de Peirce (q,p) ===");
+        System.out.println("Fórmula: F ((q → p) → p) → p : c0");
+        System.out.println("Tercera refutación de la Fig. 3 del paper [labeled-ke-ipl].");
+        System.out.println("Particularmente ilustra la noción de rama completada,");
+        System.out.println("vía el proviso sobre F→₁ y la regla F→₃.");
+
+        try {
+            Context context = new Context();
+            context.getNewFormulaLabel();
+
+            // F ((q → p) → p) → p : c0
+            String formula = "F ->(->(->(q p) p) p) c0";
+
+            Proof proof = proveFormulas(formula);
+            IProofTree tree = proof.getProofTree();
+            String treeOutput = tree.toString();
+
+            System.out.println("\n📊 Árbol resultado:");
+            System.out.println(treeOutput);
+
+            assertFalse("La variante de Peirce (q,p) NO debe estar cerrada en IPL", proof.isClosed());
+            assertTrue("Debe aplicar la regla F_A_IMPLIES_B_TA_FB", treeOutput.contains("F_A_IMPLIES_B_TA_FB"));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            fail("Error en test variante de Peirce (q,p): " + e.getMessage());
         }
     }
 

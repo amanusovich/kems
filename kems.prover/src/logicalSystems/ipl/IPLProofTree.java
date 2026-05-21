@@ -582,7 +582,12 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
      * @return Set de SignedFormula que representa b*
      */
     public Set<SignedFormula> extendBranch() {
-        Set<SignedFormula> bStar = new HashSet<>();
+        // LinkedHashSet preserves insertion order, so downstream consumers
+        // (PB-ALT label selection, selectUnanalyzedFormula, etc.) iterate in
+        // a deterministic order. HashSet would tie iteration order to
+        // SignedFormula.hashCode(), which can vary between JVM runs and
+        // produce different proof trees across executions for the same input.
+        Set<SignedFormula> bStar = new java.util.LinkedHashSet<>();
         List<SignedFormula> formulasInB = new ArrayList<>();
         
         // Paso 1: Recolectar todas las fórmulas en b (rama actual Y ramas ancestras)
@@ -609,8 +614,11 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         
         // Paso 2: Aplicar monotonicidad implícita según Definition 5.3
         
-        // Obtener todas las etiquetas constantes en la rama (Cb)
-        Set<FormulaLabel> constantLabels = new HashSet<>();
+        // Obtener todas las etiquetas constantes en la rama (Cb).
+        // LinkedHashSet: preserva el orden de aparición en la rama (b),
+        // necesario para que PB-ALT y la propagación por monotonicidad
+        // sean deterministas entre corridas.
+        Set<FormulaLabel> constantLabels = new java.util.LinkedHashSet<>();
         for (SignedFormula sf : formulasInB) {
             if (sf instanceof LabelledFormula) {
                 LabelledFormula lf = (LabelledFormula) sf;
