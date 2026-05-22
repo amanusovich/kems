@@ -21,6 +21,7 @@ import main.proofTree.INode;
 import main.proofTree.IProofTree;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.SignedFormulaNodeState;
+import main.proofTree.iterator.IProofTreeBasicIterator;
 import main.proofTree.iterator.IProofTreeVeryBasicIterator;
 import main.proofTree.origin.IOrigin;
 import main.strategy.memorySaver.OptimizedClassicalProofTree;
@@ -75,11 +76,23 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
      */
     private static AtomicInteger branchIdCounter = new AtomicInteger(0);
 
+    /**
+     * Snapshot of the path-level rinstance count at the time each
+     * {@link SignedFormulaNode} was added to this branch. Used by the GUI
+     * / HTML viewer to show the rinstances panel filtered to the temporal
+     * state of the selected node (i.e. only rinstances registered up to
+     * and including the rule application that created that node).
+     */
+    private final Map<SignedFormulaNode, Integer> rinstancesAtNodeCreation = new java.util.IdentityHashMap<>();
+
     public IPLProofTree(SignedFormulaNode aNode) {
         super(aNode);
         this.branchId = "root";
         this.sharedLabelBranchMap = new HashMap<>();
-        this.localRinstances = new HashSet<>();
+        // LinkedHashSet preserves insertion order; useful for GUI / HTML inspection
+        // where rinstances are displayed in the order they were registered.
+        this.localRinstances = new java.util.LinkedHashSet<>();
+        recordRinstancesSnapshot(aNode);
     }
     
     /**
@@ -91,8 +104,38 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                          String branchId) {
         super(aNode);
         this.sharedLabelBranchMap = (sharedLabelBranchMap != null) ? sharedLabelBranchMap : new HashMap<>();
-        this.localRinstances = new HashSet<>();
+        this.localRinstances = new java.util.LinkedHashSet<>();
         this.branchId = branchId;
+        recordRinstancesSnapshot(aNode);
+    }
+
+    private void recordRinstancesSnapshot(SignedFormulaNode node) {
+        // We snapshot the path-level count (ancestors + local) because the GUI
+        // displays the full chain in rinstances; the count tells the viewer
+        // how many of those entries already existed at the time the node was
+        // added.
+        rinstancesAtNodeCreation.put(node, currentPathRinstancesSize());
+    }
+
+    private int currentPathRinstancesSize() {
+        int n = 0;
+        IPLProofTree current = this;
+        while (current != null) {
+            n += current.localRinstances.size();
+            IProofTree parent = current.getParent();
+            current = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
+        }
+        return n;
+    }
+
+    /**
+     * Returns the path-level rinstance count captured at the moment {@code node}
+     * was added to this branch, or {@code -1} if the node has no recorded
+     * snapshot (e.g. legacy proof trees serialised before this field existed).
+     */
+    public int getRinstancesAtCreation(SignedFormulaNode node) {
+        Integer v = rinstancesAtNodeCreation.get(node);
+        return v != null ? v : -1;
     }
 
     @Override
@@ -100,6 +143,26 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         String newBranchId = "branch_" + branchIdCounter.incrementAndGet();
         return new IPLProofTree((SignedFormulaNode) aNode,
                                 sharedLabelBranchMap, newBranchId);
+    }
+
+    /**
+     * Hook invoked by {@link main.proofTree.ProofTree#addLeft(INode)} /
+     * {@link main.proofTree.ProofTree#addRight(INode)} after the new child
+     * branch has been linked to its parent.
+     *
+     * The child's constructor runs <em>before</em> {@code setReferences} sets
+     * the parent pointer, so {@link #recordRinstancesSnapshot(SignedFormulaNode)}
+     * called from the constructor sees an empty ancestor chain and records
+     * a snapshot of 0. Here we re-record the snapshot now that the parent
+     * linkage is in place, giving the correct path-level rinstance count for
+     * the child's root node.
+     */
+    @Override
+    protected void setOtherStructures(IProofTree pt, INode aNode) {
+        super.setOtherStructures(pt, aNode);
+        if (pt instanceof IPLProofTree && aNode instanceof SignedFormulaNode) {
+            ((IPLProofTree) pt).recordRinstancesSnapshot((SignedFormulaNode) aNode);
+        }
     }
 
     /**
@@ -155,11 +218,33 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
 
     /**
      * Returns an unmodifiable view of rule instances registered in this branch only.
-     * For the full set along the current path use wasRuleInstanceApplied().
-     * Used by the GUI / HTML export.
+     * Preserves insertion order (LinkedHashSet). For the full path use
+     * {@link #getAllRinstances()}.
      */
-    public Set<String> getRinstances() {
+    public Set<String> getLocalRinstances() {
         return java.util.Collections.unmodifiableSet(localRinstances);
+    }
+
+    /**
+     * Returns all rule instances along the current path (root → … → this branch)
+     * in insertion order. Ancestor instances come before the local ones, which
+     * matches the temporal order in which they were registered while traversing
+     * the proof tree. Used by the GUI / HTML export for the "rinstances" panel.
+     */
+    public java.util.LinkedHashSet<String> getRinstances() {
+        // Collect ancestors top-down first
+        java.util.Deque<IPLProofTree> chain = new java.util.ArrayDeque<>();
+        IPLProofTree current = this;
+        while (current != null) {
+            chain.addFirst(current);
+            IProofTree parent = current.getParent();
+            current = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
+        }
+        java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>();
+        for (IPLProofTree t : chain) {
+            all.addAll(t.localRinstances);
+        }
+        return all;
     }
 
     /**
@@ -269,23 +354,26 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     @Override
     public void addLast(INode aNode) {
         super.addLast(aNode);
-        
-        // Solo procesar SignedFormulaNode
+
         if (!(aNode instanceof SignedFormulaNode)) {
             return;
         }
-        
+
         SignedFormulaNode sfNode = (SignedFormulaNode) aNode;
         SignedFormula sf = (SignedFormula) sfNode.getContent();
-        
+
         // Registrar la etiqueta de esta fórmula en el branch actual
         if (sf instanceof LabelledFormula) {
             LabelledFormula lf = (LabelledFormula) sf;
             registerLabel(lf.getLabel());
         }
-        
-        // ✅ NO MÁS MONOTONICIDAD EXPLÍCITA NI RETROACTIVA
-        // La extensión b* se calcula dinámicamente cuando se necesita
+
+        // Snapshot del estado de rinstances al momento de agregar el nodo
+        // (lo usa el visor para filtrar la vista de rinstances por nodo).
+        recordRinstancesSnapshot(sfNode);
+
+        // La extensión b* se calcula dinámicamente cuando se necesita;
+        // no propagamos monotonicidad físicamente en el árbol.
     }
 
     @Override
@@ -582,60 +670,97 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
      * @return Set de SignedFormula que representa b*
      */
     public Set<SignedFormula> extendBranch() {
-        // LinkedHashSet preserves insertion order, so downstream consumers
-        // (PB-ALT label selection, selectUnanalyzedFormula, etc.) iterate in
-        // a deterministic order. HashSet would tie iteration order to
-        // SignedFormula.hashCode(), which can vary between JVM runs and
-        // produce different proof trees across executions for the same input.
-        Set<SignedFormula> bStar = new java.util.LinkedHashSet<>();
+        return computeBStarFor(collectFormulasInPath(null));
+    }
+
+    /**
+     * Variante de {@link #extendBranch()} que computa b* "en el tiempo" de un
+     * nodo determinado: usa solo las fórmulas físicas que existían en la rama
+     * (esta + ancestros) en el momento en que {@code upTo} fue agregado, no
+     * todas las que están al cierre del proceso. Pensado para la GUI / HTML
+     * exporter: permite mostrar b* tal como se veía cuando el nodo seleccionado
+     * fue insertado.
+     *
+     * @param upTo nodo límite (inclusive). Si es {@code null}, equivale a
+     *             {@link #extendBranch()}.
+     * @return b* restringido al estado del árbol al tiempo de {@code upTo}.
+     */
+    public Set<SignedFormula> extendBranchUpTo(SignedFormulaNode upTo) {
+        return computeBStarFor(collectFormulasInPath(upTo));
+    }
+
+    /**
+     * Recolecta b (fórmulas físicas) en orden: esta rama (hasta {@code upTo}
+     * inclusive si no es null, o entera si es null), seguida de los ancestros
+     * completos. Los ancestros se incluyen siempre completos porque están
+     * congelados una vez que apareció la primera bifurcación.
+     */
+    private List<SignedFormula> collectFormulasInPath(SignedFormulaNode upTo) {
+        // LinkedHashSet de-duplica y conserva orden — varios ancestros podrían
+        // referenciar (por accidente) la misma instancia, lo que duplicaría la
+        // monotonía si lo agregáramos dos veces.
+        java.util.LinkedHashSet<SignedFormula> seen = new java.util.LinkedHashSet<>();
         List<SignedFormula> formulasInB = new ArrayList<>();
-        
-        // Paso 1: Recolectar todas las fórmulas en b (rama actual Y ramas ancestras)
-        // En el sistema de proof tree, las ramas hijas no tienen físicamente las fórmulas de las ramas padre
-        // Necesitamos recorrer la rama actual y todas sus ancestras
-        IPLProofTree currentTree = this;
+
+        // 1) Esta rama: iterar localmente y cortar si encontramos upTo
+        IProofTreeBasicIterator localIt = getLocalIterator();
+        while (localIt.hasNext()) {
+            INode node = localIt.next();
+            if (node instanceof SignedFormulaNode) {
+                SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
+                if (seen.add(sf)) formulasInB.add(sf);
+            }
+            if (upTo != null && node == upTo) {
+                break;
+            }
+        }
+
+        // 2) Ancestros: completos
+        IProofTree parent = getParent();
+        IPLProofTree currentTree = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
         while (currentTree != null) {
-            IProofTreeVeryBasicIterator it = currentTree.getTopDownIterator();
+            IProofTreeBasicIterator it = currentTree.getLocalIterator();
             while (it.hasNext()) {
                 INode node = it.next();
                 if (node instanceof SignedFormulaNode) {
-                    SignedFormulaNode sfNode = (SignedFormulaNode) node;
-                    SignedFormula sf = (SignedFormula) sfNode.getContent();
-                    // Usar Set para evitar duplicados
-                    if (bStar.add(sf)) {
-                        formulasInB.add(sf);
-                    }
+                    SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
+                    if (seen.add(sf)) formulasInB.add(sf);
                 }
             }
-            // Subir al padre
-            IProofTree parent = currentTree.getParent();
-            currentTree = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
+            IProofTree up = currentTree.getParent();
+            currentTree = (up instanceof IPLProofTree) ? (IPLProofTree) up : null;
         }
-        
-        // Paso 2: Aplicar monotonicidad implícita según Definition 5.3
-        
+
+        return formulasInB;
+    }
+
+    /**
+     * Aplica las cláusulas de Definition 5.3 (monotonía) sobre una lista
+     * {@code b} explícita. Usada por {@link #extendBranch()} y por
+     * {@link #extendBranchUpTo(SignedFormulaNode)}.
+     */
+    private Set<SignedFormula> computeBStarFor(List<SignedFormula> formulasInB) {
+        // LinkedHashSet preserva orden de inserción → resultado determinista.
+        Set<SignedFormula> bStar = new java.util.LinkedHashSet<>(formulasInB);
+
         // Obtener todas las etiquetas constantes en la rama (Cb).
-        // LinkedHashSet: preserva el orden de aparición en la rama (b),
-        // necesario para que PB-ALT y la propagación por monotonicidad
-        // sean deterministas entre corridas.
         Set<FormulaLabel> constantLabels = new java.util.LinkedHashSet<>();
         for (SignedFormula sf : formulasInB) {
             if (sf instanceof LabelledFormula) {
                 LabelledFormula lf = (LabelledFormula) sf;
                 FormulaLabel label = lf.getLabel();
-                // Solo etiquetas constantes (no variables)
                 if (label != null && label instanceof ContextFormulaLabel) {
                     constantLabels.add(label);
                 }
             }
         }
-        
+
         Context context = null;
         if (!constantLabels.isEmpty()) {
             FormulaLabel anyLabel = constantLabels.iterator().next();
             context = getContextFromLabel(anyLabel);
         }
-        
+
         if (context == null) {
             return bStar; // Sin Context, no hay monotonicidad
         }

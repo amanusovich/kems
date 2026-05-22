@@ -63,21 +63,8 @@ public class ProblemEditor extends JFrame implements ActionListener, WindowListe
 
 	public static final String CURRENT_PROBLEM = "problem description in Problem Editor window";
 
-	private static final String[][] IPL_EXAMPLES = {
-		{"Paper 1: ((A->B)^(A->~B))->~A", "F ->(*(->(A B) ->(A -B)) -A) c0", "Valid"},
-		{"Paper 2: ~~(~~A->A)", "F -(-(->(-(-A) A))) c0", "Valid"},
-		{"Paper 3: ~(A->B)->(~~A^~B)", "F ->(-(->(A B)) *(-(-A) -B)) c0", "Valid"},
-		{"Paper 4: (((p->q)->p)->p->q)->q", "F ->(->(->(->(->(p q) p) p) q) q) c0", "Valid"},
-		{"F-Not Propagation: (P->Q)^~~P->~~Q", "F ->(*(->(P Q) -(-(P))) -(-(Q))) c0", "Valid"},
-		{"Long PB: symmetric equiv p1,p2,p3",
-			"F ->(*(*(->(*(->(p1 p2) ->(p2 p1)) *(p1 *(p2 p3))) ->(*(->(p2 p3) ->(p3 p2)) *(p1 *(p2 p3)))) ->(*(->(p3 p1) ->(p1 p3)) *(p1 *(p2 p3)))) *(p1 *(p2 p3))) c0",
-			"Valid"},
-		{"LEM: P v ~P (NOT valid in IPL)", "F +(P -P) c0", "Not valid"},
-		{"DN Elim: ~~A->A (NOT valid in IPL)", "F ->(-(-A) A) c0", "Not valid"},
-		{"Peirce: ((p->q)->p)->p (NOT valid)", "F ->(->(->(p q) p) p) c0", "Not valid"},
-		{"Peirce variant: ((q->p)->p)->p (NOT valid)", "F ->(->(->(q p) p) p) c0", "Not valid"},
-		{"Scott axiom: ((~~p->p)->(pv~p))->(~pv~~p) (NOT valid)", "F ->(->(->(-(-p) p) +(p -p)) +(-p -(-p))) c0", "Not valid"},
-	};
+	// IPL preset formulas live in {@link proverinterface.webserver.IPLExamplesProvider}
+	// so the Swing GUI and the web server share a single source of truth.
 
 	private File editingFile;
 
@@ -181,13 +168,11 @@ public class ProblemEditor extends JFrame implements ActionListener, WindowListe
 
 		JMenu iplMenu = new JMenu("IPL Examples");
 		iplMenu.setMnemonic(KeyEvent.VK_I);
-		for (int i = 0; i < IPL_EXAMPLES.length; i++) {
-			String label = IPL_EXAMPLES[i][0];
-			String formula = IPL_EXAMPLES[i][1];
-			String validity = IPL_EXAMPLES[i][2];
-			JMenuItem item = new JMenuItem(label);
-			item.setToolTipText(validity + " | " + formula);
-			final String formulaText = formula;
+		for (proverinterface.webserver.IPLExamplesProvider.Example ex
+				: proverinterface.webserver.IPLExamplesProvider.getExamples()) {
+			JMenuItem item = new JMenuItem(ex.name);
+			item.setToolTipText(ex.validity + " | " + ex.formula);
+			final String formulaText = ex.formula;
 			item.addActionListener(new ActionListener() {
 				public void actionPerformed(ActionEvent ev) {
 					editorPane.setText(formulaText);

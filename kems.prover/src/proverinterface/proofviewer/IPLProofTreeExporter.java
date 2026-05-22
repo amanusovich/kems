@@ -41,9 +41,12 @@ import main.tableau.verifier.ExtendedProof;
  * {
  *   "branchId": "root",
  *   "closed": true,
- *   "formulas": [ { id, text, sign, label, ruleType, rule, main, auxiliaries } ],  // excludes PROPAGATION nodes
- *   "bStarExtensions": [ "[propagated] T A c2", "[virtual] T B c3", ... ],
- *   "rinstances": [ "F_A_IMPLIES_B_TA_FB:F phi c0", ... ],  // this branch + all ancestors
+ *   "formulas": [ { id, text, sign, label, ruleType, rule, main, auxiliaries,
+ *                   rinstancesAtCreation, bStarExtensionsAtCreation } ],
+ *                                                       // excludes PROPAGATION nodes; the *AtCreation fields
+ *                                                       // capture the path state when this node was added.
+ *   "bStarExtensions": [ "[propagated] T A c2", "[virtual] T B c3", ... ],  // branch-level, final state
+ *   "rinstances": [ "F_A_IMPLIES_B_TA_FB:F phi c0", ... ],  // this branch + all ancestors, in insertion order
  *   "left": { ... } | null,
  *   "right": { ... } | null
  * }
@@ -186,11 +189,19 @@ public class IPLProofTreeExporter {
         // Propagated formulas are Kripke-monotonicity materialisations of b*;
         // they are excluded from the main tree and shown only in bStarExtensions.
         sb.append(pad2).append("\"formulas\": [\n");
+        // We walk the displayed tree (which carries the rule/origin metadata
+        // used to render the GUI) and, in parallel, the original IPL tree.
+        // The IPL nodes are needed to look up per-node snapshots
+        // (rinstancesAtCreation, bStarExtensionsAtCreation) by reference
+        // identity, because ProofVerifier wraps the original nodes into
+        // ExtendedNode instances when it builds the displayed ExtendedProofTree.
         IProofTreeBasicIterator it = tree.getLocalIterator();
+        IProofTreeBasicIterator iplIt = (iplTree != null) ? iplTree.getLocalIterator() : null;
         boolean firstFormula = true;
         int nodeId = 0;
         while (it.hasNext()) {
             INode node = it.next();
+            SignedFormulaNode iplNode = nextSignedFormulaNode(iplIt);
             if (!(node instanceof SignedFormulaNode)) continue;
             SignedFormulaNode sfn = (SignedFormulaNode) node;
             IOrigin fOrigin = sfn.getOrigin();
@@ -201,55 +212,23 @@ public class IPLProofTreeExporter {
             if (!firstFormula) sb.append(",\n");
             firstFormula = false;
             sb.append(pad2).append("  ");
-            appendFormulaNode(sb, sfn, sf, nodeId++);
+            int riSnapshot = (iplTree != null && iplNode != null)
+                    ? iplTree.getRinstancesAtCreation(iplNode) : -1;
+            List<String> bStarAt = (iplTree != null && iplNode != null)
+                    ? buildBStarExtensions(iplTree, iplNode) : null;
+            appendFormulaNode(sb, sfn, sf, nodeId++, riSnapshot, bStarAt);
         }
         sb.append("\n").append(pad2).append("],\n");
 
-        // --- b* extensions ---
-        // Shows propagated formulas (Kripke monotonicity materialised into b) and any
-        // remaining virtual b* extensions.  Uses the original IPLProofTree (iplTree)
-        // because ExtendedProofTree doesn't carry these IPL-specific structures.
+        // --- b* extensions (branch-level, final state) ---
+        // Shows propagated formulas (Kripke monotonicity materialised into b) and
+        // virtual b* extensions for the entire branch at proof end. Per-formula
+        // (temporal) snapshots are emitted inside each formula's record above.
         sb.append(pad2).append("\"bStarExtensions\": [");
         if (iplTree != null) {
-            // 1) Collect physical strings + propagated entries walking up path
-            Set<String> physicalStrings = new HashSet<>();
-            List<String> propagatedEntries = new ArrayList<>();
-            Set<String> seenPropagated = new HashSet<>();
-            IPLProofTree pathCur = iplTree;
-            while (pathCur != null) {
-                IProofTreeBasicIterator lit = pathCur.getLocalIterator();
-                while (lit.hasNext()) {
-                    INode node = lit.next();
-                    if (node instanceof SignedFormulaNode) {
-                        SignedFormulaNode sfNode = (SignedFormulaNode) node;
-                        String sfStr = ((SignedFormula) sfNode.getContent()).toString();
-                        physicalStrings.add(sfStr);
-                        IOrigin origin = sfNode.getOrigin();
-                        if (origin != null
-                                && NamedOrigin.PROPAGATION.getName().equals(origin.getName())
-                                && seenPropagated.add(sfStr)) {
-                            propagatedEntries.add("[propagated] " + sfStr);
-                        }
-                    }
-                }
-                IProofTree up = pathCur.getParent();
-                pathCur = (up instanceof IPLProofTree) ? (IPLProofTree) up : null;
-            }
-
-            // 2) Virtual b* = in extendBranch() but not physical
-            Set<SignedFormula> bStar = iplTree.extendBranch();
-            List<String> virtualEntries = new ArrayList<>();
-            for (SignedFormula sf : bStar) {
-                if (!physicalStrings.contains(sf.toString())) {
-                    virtualEntries.add("[virtual] " + sf.toString());
-                }
-            }
-
-            List<String> allExt = new ArrayList<>();
-            allExt.addAll(propagatedEntries);
-            allExt.addAll(virtualEntries);
+            List<String> branchExt = buildBStarExtensions(iplTree, null);
             boolean firstExt = true;
-            for (String s : allExt) {
+            for (String s : branchExt) {
                 if (!firstExt) sb.append(", ");
                 sb.append(jsonStr(s));
                 firstExt = false;
@@ -258,8 +237,9 @@ public class IPLProofTreeExporter {
         sb.append("],\n");
 
         // --- rinstances ---
-        // rinstances is now a single global set shared by all branches (Algorithm 1, paper).
-        // Uses the original IPLProofTree (iplTree) since ExtendedProofTree has no rinstances.
+        // rinstances is local per branch with ancestor walk (Algorithm 1, line 4
+        // of the revised paper). getRinstances() returns the full chain
+        // root → … → branch in insertion order.
         sb.append(pad2).append("\"rinstances\": [");
         if (iplTree != null) {
             boolean firstRi = true;
@@ -290,9 +270,35 @@ public class IPLProofTreeExporter {
     }
 
     private static void appendFormulaNode(StringBuilder sb, SignedFormulaNode sfn,
-                                          SignedFormula sf, int id) {
+                                          SignedFormula sf, int id, int rinstancesAtCreation,
+                                          List<String> bStarExtensionsAtCreation) {
         sb.append("{");
         sb.append("\"id\": ").append(id).append(", ");
+        // Path-level rinstance count captured when this node was first added to
+        // its branch (-1 if not available). The HTML viewer uses it to slice the
+        // branch's rinstances list when displaying node detail, so the viewer
+        // shows only the rule instances that already existed at the time this
+        // node was created.
+        sb.append("\"rinstancesAtCreation\": ").append(rinstancesAtCreation).append(", ");
+        // b* extensions computed using only the formulas in scope at the
+        // moment this node was added (i.e. this branch up to and including
+        // this node, plus all fully-realised ancestor branches). This lets
+        // the HTML viewer display b* as it was when the selected node was
+        // created instead of the post-proof snapshot. Empty list if the IPL
+        // proof tree was not available at export time.
+        if (bStarExtensionsAtCreation == null) {
+            // Distinguish "no snapshot available" from "snapshot is empty" so the
+            // HTML viewer can fall back to the branch-level b* extensions when the
+            // per-node data is missing.
+            sb.append("\"bStarExtensionsAtCreation\": null, ");
+        } else {
+            sb.append("\"bStarExtensionsAtCreation\": [");
+            for (int i = 0; i < bStarExtensionsAtCreation.size(); i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(jsonStr(bStarExtensionsAtCreation.get(i)));
+            }
+            sb.append("], ");
+        }
         sb.append("\"text\": ").append(jsonStr(sf.toString())).append(", ");
         sb.append("\"sign\": ").append(jsonStr(sf.getSign().toString())).append(", ");
 
@@ -336,6 +342,93 @@ public class IPLProofTreeExporter {
             sb.append(jsonStr(auxList.get(i)));
         }
         sb.append("]}");
+    }
+
+    /**
+     * Returns the next {@link SignedFormulaNode} from an iterator, or null if
+     * the iterator is null or exhausted. Used to walk the IPL tree in parallel
+     * with the displayed tree.
+     */
+    private static SignedFormulaNode nextSignedFormulaNode(IProofTreeBasicIterator it) {
+        if (it == null) return null;
+        while (it.hasNext()) {
+            INode n = it.next();
+            if (n instanceof SignedFormulaNode) return (SignedFormulaNode) n;
+        }
+        return null;
+    }
+
+    /**
+     * Builds the list of b* extension strings (propagated + virtual) for
+     * {@code iplTree}, optionally restricted to the branch state as of
+     * {@code upTo}. If {@code upTo} is null, returns the full branch-level
+     * extensions; otherwise, only formulas physically in this branch at or
+     * before {@code upTo} (plus all ancestor branches) contribute.
+     *
+     * The format mirrors what {@code IPLBranchDetailPanel} expects:
+     *   "[propagated] T A c2", "[virtual] T B c3", …
+     */
+    private static List<String> buildBStarExtensions(IPLProofTree iplTree, SignedFormulaNode upTo) {
+        Set<String> physicalStrings = new HashSet<>();
+        List<String> propagatedEntries = new ArrayList<>();
+        Set<String> seenPropagated = new HashSet<>();
+
+        // 1) Esta rama: limitar al estado al momento de upTo si está definido
+        IProofTreeBasicIterator localIt = iplTree.getLocalIterator();
+        while (localIt.hasNext()) {
+            INode node = localIt.next();
+            if (node instanceof SignedFormulaNode) {
+                SignedFormulaNode sfNode = (SignedFormulaNode) node;
+                String sfStr = ((SignedFormula) sfNode.getContent()).toString();
+                physicalStrings.add(sfStr);
+                IOrigin origin = sfNode.getOrigin();
+                if (origin != null
+                        && NamedOrigin.PROPAGATION.getName().equals(origin.getName())
+                        && seenPropagated.add(sfStr)) {
+                    propagatedEntries.add("[propagated] " + sfStr);
+                }
+            }
+            if (upTo != null && node == upTo) break;
+        }
+
+        // 2) Ancestros completos
+        IProofTree up = iplTree.getParent();
+        IPLProofTree pathCur = (up instanceof IPLProofTree) ? (IPLProofTree) up : null;
+        while (pathCur != null) {
+            IProofTreeBasicIterator lit = pathCur.getLocalIterator();
+            while (lit.hasNext()) {
+                INode node = lit.next();
+                if (node instanceof SignedFormulaNode) {
+                    SignedFormulaNode sfNode = (SignedFormulaNode) node;
+                    String sfStr = ((SignedFormula) sfNode.getContent()).toString();
+                    physicalStrings.add(sfStr);
+                    IOrigin origin = sfNode.getOrigin();
+                    if (origin != null
+                            && NamedOrigin.PROPAGATION.getName().equals(origin.getName())
+                            && seenPropagated.add(sfStr)) {
+                        propagatedEntries.add("[propagated] " + sfStr);
+                    }
+                }
+            }
+            IProofTree pUp = pathCur.getParent();
+            pathCur = (pUp instanceof IPLProofTree) ? (IPLProofTree) pUp : null;
+        }
+
+        // 3) Virtuales: en b* (recomputada al momento de upTo) pero no físicas
+        Set<SignedFormula> bStar = (upTo != null)
+                ? iplTree.extendBranchUpTo(upTo)
+                : iplTree.extendBranch();
+        List<String> virtualEntries = new ArrayList<>();
+        for (SignedFormula sf : bStar) {
+            if (!physicalStrings.contains(sf.toString())) {
+                virtualEntries.add("[virtual] " + sf.toString());
+            }
+        }
+
+        List<String> allExt = new ArrayList<>(propagatedEntries.size() + virtualEntries.size());
+        allExt.addAll(propagatedEntries);
+        allExt.addAll(virtualEntries);
+        return allExt;
     }
 
     // -------------------------------------------------------------------------

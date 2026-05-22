@@ -146,19 +146,21 @@ public class IPLBranchDetailPanel extends JPanel {
         }
 
         // ---- rinstances ----
-        // rinstances is a single global set shared by all branches (Algorithm 1, paper).
+        // rinstances is local per branch with ancestor walk (Algorithm 1 line 4 of
+        // the revised paper, reset per outer-loop iteration). getRinstances()
+        // returns the full chain root → … → branch in insertion order, which is
+        // the temporal order in which they were registered.
         rinstancesModel.clear();
-        List<String> riSorted = new ArrayList<>(branch.getRinstances());
-        riSorted.sort(String::compareTo);
-        if (riSorted.isEmpty()) {
+        java.util.LinkedHashSet<String> rinsts = branch.getRinstances();
+        if (rinsts.isEmpty()) {
             rinstancesModel.addElement("(none)");
         } else {
-            for (String r : riSorted) rinstancesModel.addElement(r);
+            for (String r : rinsts) rinstancesModel.addElement(r);
         }
 
         // Update tab titles with counts
         tabs.setTitleAt(0, "b* Extensions (" + bstarCount + ")");
-        tabs.setTitleAt(1, "rinstances (" + riSorted.size() + ")");
+        tabs.setTitleAt(1, "rinstances (" + rinsts.size() + ")");
     }
 
     /** Clears both lists and shows a placeholder message. */

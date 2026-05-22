@@ -666,17 +666,21 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             return false;
         }
         
+        // PASO 7: Registrar instancia de regla en rinstances globales (Algorithm 1, línea 18).
+        // Registrar ANTES de agregar la conclusión a left (PASO 8) para que el snapshot por
+        // nodo del visor (recordRinstancesSnapshot en addLast) incluya la regla que generó
+        // la conclusión, de la misma forma en que IPLOnePremiseRuleApplicator lo hace.
+        if (current instanceof IPLProofTree) {
+            ((IPLProofTree) current).registerRuleInstance(ruleInstanceKey);
+        }
+
+        // PASO 8: Agregar la conclusión a la rama izquierda
         left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED, strategy
                 .createOrigin(rule, current.getNode(mainPremise), left.getNode(auxWithSharedLabel))));
-        
+
         if (IPLTracer.isEnabled()) {
             tracer.logRuleApplied(rule.toString(), mainPremise.toString(), auxWithSharedLabel.toString(), conclusion.toString());
             tracer.logPBApplied(mainPremise.toString(), rule.toString(), auxWithSharedLabel.toString(), "left", "right");
-        }
-        
-        // PASO 7: Registrar instancia de regla en rinstances globales (Algorithm 1, línea 18)
-        if (current instanceof IPLProofTree) {
-            ((IPLProofTree) current).registerRuleInstance(ruleInstanceKey);
         }
         
         // Mark ANALYSED in both branches. Universal formulas (T(A→B), T(¬A)) will be
@@ -763,6 +767,12 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                         (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), ci);
             }
             SignedFormula conclusion = generateIPLRuleConclusion(rule, mainPremiseForConclusion, auxWithCj, sfb);
+
+            // Registrar instancia de regla en rinstances globales ANTES de agregar la
+            // conclusión a left (Algorithm 1, línea 18): así el snapshot por nodo del
+            // visor incluye la regla que generó la conclusión.
+            iplTree.registerRuleInstance(ruleKeyAlt);
+
             if (conclusion != null) {
                 left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED,
                         strategy.createOrigin(rule, current.getNode(mainPremise),
@@ -776,9 +786,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                 tracer.logPBApplied(mainPremise.toString(), rule.toString(),
                         auxWithCj.toString(), "left", "right");
             }
-
-            // Registrar instancia de regla en rinstances globales (Algorithm 1, línea 18)
-            iplTree.registerRuleInstance(ruleKeyAlt);
 
             // Mark ANALYSED in both branches; Def. 5.6 re-check in selectUnanalyzedFormula
             // handles re-selection of universal formulas when new worlds appear.

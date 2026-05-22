@@ -38,70 +38,70 @@ public class IPLRulesComprehensiveTest {
         signedFormulaCreator.setTwoPhases(false);
         IPLTracer.setEnabled(true);
     }
-
+    
     /**
      * Crea un Context con relaciones predefinidas para tests específicos
      * Relaciones: c0 ≤ c1 ≤ c2
      */
     private Context createContextWithRelations() {
         Context context = new Context();
-
+        
         // Crear etiquetas c0, c1, c2 con relaciones específicas
         FormulaLabel c0 = context.getNewFormulaLabel();
         FormulaLabel c1 = context.getNewFormulaLabel();
         FormulaLabel c2 = context.getNewFormulaLabel();
-
+        
         // Establecer algunas relaciones para tests específicos
         // c0 ≤ c1 (para tests que requieren esta relación)
         context.addRelation(c0, c1);
         context.addRelation(c1, c2);
-
+        
         return context;
     }
 
     private Proof proveFormulas(String... formulaStrings) throws Exception {
         return proveFormulasWithContext(null, formulaStrings);
     }
-
+    
     /**
      * Método principal que usa la nueva estructura con Context compartido
      */
     private Proof proveFormulasWithContext(Context predefinedContext, String... formulaStrings) throws Exception {
         // Usar todas las fórmulas como un solo string separado por líneas
         String allFormulas = String.join("\n", formulaStrings);
-
+        
         // Parsear usando SignedFormulaCreator (que ya maneja IPL correctamente)
         Problem problem = signedFormulaCreator.parseText(allFormulas);
-
+        
         // Si se proporciona un Context predefinido, usarlo
         if (predefinedContext != null) {
             problem.setIPLContext(predefinedContext);
-
+            
             // ✅ CRÍTICO: Convertir fórmulas existentes para usar el Context predefinido
             IPLSignedFormulaFactory iplFactory = new IPLSignedFormulaFactory(predefinedContext);
-
+            
             // ✅ CRÍTICO: Convertir fórmulas para usar ContextFormulaLabel del Context predefinido
             List<SignedFormula> originalFormulas = new ArrayList<SignedFormula>(problem.getFormulas().getList());
             SignedFormulaList formulasList = problem.getFormulas();
-
+            
             // Crear mapa de índices a ContextFormulaLabel para reutilizar instancias
             Map<Integer, ContextFormulaLabel> labelMap = new HashMap<Integer, ContextFormulaLabel>();
-
+            
             // Primero, mapear todas las etiquetas existentes en el Context predefinido
             for (FormulaLabel label : predefinedContext.getLabels()) {
                 if (label instanceof ContextFormulaLabel) {
                     labelMap.put(label.getIndex(), (ContextFormulaLabel) label);
                 }
             }
-
+            
             // Limpiar y reconstruir la lista
             while (formulasList.size() > 0) {
                 formulasList.remove(0);
             }
-
+            
             for (SignedFormula originalFormula : originalFormulas) {
                 FormulaLabel originalLabel = originalFormula.getLabel();
-
+                
                 // Obtener o crear ContextFormulaLabel usando el mapa
                 ContextFormulaLabel contextLabel = labelMap.get(originalLabel.getIndex());
                 if (contextLabel == null) {
@@ -109,37 +109,37 @@ public class IPLRulesComprehensiveTest {
                     predefinedContext.addElement(contextLabel);
                     labelMap.put(originalLabel.getIndex(), contextLabel);
                 }
-
+                
                 // Crear nueva LabelledFormula con ContextFormulaLabel
                 LabelledFormula newLabelledFormula = iplFactory.createLabelledFormula(
-                        contextLabel,
-                        originalFormula
+                    contextLabel,
+                    originalFormula
                 );
-
+                
                 formulasList.add(newLabelledFormula);
             }
-
+            
             problem.setSignedFormulaFactory(iplFactory);
         } else {
         }
-
+        
         // Crear método con reglas IPL
         Method method = new Method(RuleStructureFactory.createRulesStructure(RuleStructureFactory.IPL));
-
+        
         // Crear estrategia IPL
         IPLSimpleStrategy strategy = new IPLSimpleStrategy(method);
         strategy.setComparator(new InsertionOrderSignedFormulaComparator());
-
+        
         // Inyectar Context del Problem en la Strategy (nueva estructura)
         // if (problem.hasIPLContext()) {
         //     strategy.setIPLContext(problem.getIPLContext());
         // }
-
+        
         // Crear y configurar prover
         Prover prover = new Prover();
         prover.setMethod(method);
         prover.setStrategy(strategy);
-
+        
         IPLTracer.getInstance().reset();
         Proof proof = prover.prove(problem);
         System.out.println(IPLTracer.getInstance().formatText());
@@ -151,17 +151,17 @@ public class IPLRulesComprehensiveTest {
     // REGLA 1: F_OR
     // F A∨B : ci → F A: ci, F B : ci
     // =====================================
-
+    
     @Test
     public void testRule1_F_OR_BasicApplication() {
         try {
             Proof proof = proveFormulas("F +(P Q) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c0", treeOutput.contains("F P c0"));
             assertTrue("Debe generar F Q c0", treeOutput.contains("F Q c0"));
             assertTrue("Debe aplicar la regla F_OR", treeOutput.contains("F_OR"));
@@ -169,7 +169,7 @@ public class IPLRulesComprehensiveTest {
             fail("Error en test F_OR: " + e.getMessage());
         }
     }
-
+    
     @Test
     public void testRule1_F_OR_WithPredefinedContext() {
         try {
@@ -177,10 +177,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "F +(P Q) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado con Context predefinido:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c0", treeOutput.contains("F P c0"));
             assertTrue("Debe generar F Q c0", treeOutput.contains("F Q c0"));
             assertTrue("Debe aplicar la regla F_OR", treeOutput.contains("F_OR"));
@@ -190,7 +190,7 @@ public class IPLRulesComprehensiveTest {
     }
 
     // =====================================
-    // REGLA 2: T_AND
+    // REGLA 2: T_AND  
     // T A∧B : ci → T A: ci, T B : ci
     // =====================================
 
@@ -200,10 +200,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulas("T *(P Q) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T P c0", treeOutput.contains("T P c0"));
             assertTrue("Debe generar T Q c0", treeOutput.contains("T Q c0"));
             assertTrue("Debe aplicar la regla T_AND", treeOutput.contains("T_AND"));
@@ -219,10 +219,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T *(P Q) c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado con Context predefinido:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T P c1", treeOutput.contains("T P c1"));
             assertTrue("Debe generar T Q c1", treeOutput.contains("T Q c1"));
             assertTrue("Debe aplicar la regla T_AND", treeOutput.contains("T_AND"));
@@ -236,7 +236,7 @@ public class IPLRulesComprehensiveTest {
     // REGLA 3: X_OR_F_LEFT
     // T A∨B : ci, F A: cj, ci ⪯ cj → T B : ci
     // =====================================
-
+    
     @Test
     public void testRule3_X_OR_F_LEFT_ValidLabelCondition() {
         try {
@@ -244,10 +244,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T +(P Q) c0", "F P c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T Q c0", treeOutput.contains("T Q c0"));
             assertTrue("Debe aplicar la regla T_OR_F_LEFT", treeOutput.contains("T_OR_F_LEFT"));
         } catch (Exception e) {
@@ -262,17 +262,17 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T +(P Q) c1", "F P c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T Q c1", treeOutput.contains("T Q c1"));
             assertTrue("Debe aplicar la regla T_OR_F_LEFT", treeOutput.contains("T_OR_F_LEFT"));
         } catch (Exception e) {
             fail("Error en test X_OR_F_LEFT válido: " + e.getMessage());
         }
     }
-
+    
     @Test
     public void testRule3_X_OR_F_LEFT_InvalidLabelCondition() {
         try {
@@ -280,10 +280,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T +(P Q) c1", "F P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("NO debe aplicar X_OR_F_LEFT con labels inválidos",
                        treeOutput.contains("X_OR_F_LEFT"));
         } catch (Exception e) {
@@ -295,7 +295,7 @@ public class IPLRulesComprehensiveTest {
     // REGLA 4: T_OR_F_RIGHT
     // T A∨B : ci, F B: cj, ci ⪯ cj → T A : ci
     // =====================================
-
+    
     @Test
     public void testRule4_T_OR_F_RIGHT_ValidLabelCondition() {
         try {
@@ -303,17 +303,17 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T +(P Q) c0", "F Q c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T P c0", treeOutput.contains("T P c0"));
             assertTrue("Debe aplicar la regla T_OR_F_RIGHT", treeOutput.contains("T_OR_F_RIGHT"));
         } catch (Exception e) {
             fail("Error en test T_OR_F_RIGHT válido: " + e.getMessage());
         }
     }
-
+    
     @Test
     public void testRule4_T_OR_F_RIGHT_ValidEqualLabelCondition() {
         try {
@@ -321,10 +321,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T +(P Q) c1", "F Q c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T P c1", treeOutput.contains("T P c1"));
             assertTrue("Debe aplicar la regla T_OR_F_RIGHT", treeOutput.contains("T_OR_F_RIGHT"));
         } catch (Exception e) {
@@ -336,16 +336,16 @@ public class IPLRulesComprehensiveTest {
     public void testRule4_T_OR_F_RIGHT_InvalidLabelCondition() {
         System.out.println("\n=== TEST REGLA 4: T_OR_F_RIGHT (Label inválido) ===");
         System.out.println("T (P∨Q) c1, F Q c0 (c1 ⪯̸ c0: main.label ≰ aux.label) → NO debe aplicarse");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "T +(P Q) c1", "F Q c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("NO debe aplicar T_OR_F_RIGHT con labels inválidos",
                        treeOutput.contains("T_OR_F_RIGHT"));
         } catch (Exception e) {
@@ -357,7 +357,7 @@ public class IPLRulesComprehensiveTest {
     // REGLA 5: F_AND_LEFT
     // F A∧B : cj, T A : ci, ci ⪯ cj → F B : cj
     // =====================================
-
+    
     @Test
     public void testRule5_F_AND_LEFT_ValidLabelCondition() {
         try {
@@ -365,10 +365,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "F *(P Q) c1", "T P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F Q c1", treeOutput.contains("F Q c1"));
             assertTrue("Debe aplicar la regla F_AND_LEFT", treeOutput.contains("F_AND_LEFT"));
         } catch (Exception e) {
@@ -383,10 +383,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "F *(P Q) c1", "T P c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F Q c1", treeOutput.contains("F Q c1"));
             assertTrue("Debe aplicar la regla F_AND_LEFT", treeOutput.contains("F_AND_LEFT"));
         } catch (Exception e) {
@@ -401,10 +401,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "F *(P Q) c0", "T P c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("NO debe aplicar F_AND_LEFT", treeOutput.contains("F_AND_LEFT"));
         } catch (Exception e) {
             fail("Error en test F_AND_LEFT inválido: " + e.getMessage());
@@ -415,7 +415,7 @@ public class IPLRulesComprehensiveTest {
     // REGLA 6: X_AND_T_RIGHT
     // F A∧B: cj, T B : ci, ci ≤ cj → F A : cj
     // =====================================
-
+    
     @Test
     public void testRule6_X_AND_T_RIGHT_ValidLabelCondition() {
         try {
@@ -423,10 +423,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "F *(P Q) c1", "T Q c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c1", treeOutput.contains("F P c1"));
             assertTrue("Debe aplicar la regla F_AND_RIGHT", treeOutput.contains("F_AND_RIGHT"));
         } catch (Exception e) {
@@ -441,10 +441,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context,"F *(P Q) c1", "T Q c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c1", treeOutput.contains("F P c1"));
             assertTrue("Debe aplicar la regla F_AND_RIGHT", treeOutput.contains("F_AND_RIGHT"));
         } catch (Exception e) {
@@ -459,10 +459,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context,"F *(P Q) c0", "T Q c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("NO debe aplicar X_AND_T_RIGHT", treeOutput.contains("X_AND_T_RIGHT"));
         } catch (Exception e) {
             fail("Error en test X_AND_T_RIGHT inválido: " + e.getMessage());
@@ -473,7 +473,7 @@ public class IPLRulesComprehensiveTest {
     // REGLA 7: T_IMPLIES_LEFT
     // T A→B : ci, T A : cj, ci ⪯ ck ∧ cj ⪯ ck → T B : ck
     // =====================================
-
+        
     @Test
     public void testRule7_T_IMPLIES_LEFT_MinimalGreaterLabel_SameLabels() {
         try {
@@ -481,10 +481,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T ->(P Q) c0", "T P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T Q", treeOutput.contains("T Q c0"));
             assertTrue("Debe aplicar T_IMPLIES_LEFT", treeOutput.contains("T_IMPLIES_LEFT"));
         } catch (Exception e) {
@@ -499,10 +499,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T ->(P Q) c0", "T P c2");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T Q", treeOutput.contains("T Q c2"));
             assertTrue("Debe aplicar T_IMPLIES_LEFT", treeOutput.contains("T_IMPLIES_LEFT"));
         } catch (Exception e) {
@@ -517,10 +517,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T ->(P Q) c1", "T P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T Q", treeOutput.contains("T Q c1"));
             assertTrue("Debe aplicar T_IMPLIES_LEFT", treeOutput.contains("T_IMPLIES_LEFT"));
         } catch (Exception e) {
@@ -532,7 +532,7 @@ public class IPLRulesComprehensiveTest {
     // REGLA 8: X_IMPLIES_F_RIGHT
     // T A→B : ci, F B : cj, ci ⪯ cj → F A : cj
     // =====================================
-
+    
     @Test
     public void testRule8_X_IMPLIES_F_RIGHT_ValidLabelCondition() {
         try {
@@ -540,10 +540,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T ->(P Q) c0", "F Q c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c1", treeOutput.contains("F P c1"));
             assertTrue("Debe aplicar la regla X_IMPLIES_F_RIGHT", treeOutput.contains("X_IMPLIES_F_RIGHT"));
         } catch (Exception e) {
@@ -558,10 +558,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T ->(P Q) c1", "F Q c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c1", treeOutput.contains("F P c1"));
             assertTrue("Debe aplicar la regla X_IMPLIES_F_RIGHT", treeOutput.contains("X_IMPLIES_F_RIGHT"));
         } catch (Exception e) {
@@ -576,10 +576,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T ->(P Q) c1", "F Q c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("NO debe aplicar X_IMPLIES_F_RIGHT", treeOutput.contains("X_IMPLIES_F_RIGHT"));
         } catch (Exception e) {
             fail("Error en test X_IMPLIES_F_RIGHT inválido: " + e.getMessage());
@@ -599,22 +599,22 @@ public class IPLRulesComprehensiveTest {
     //   Remark 5.2: el proviso garantiza a lo sumo un nuevo label por cada
     //   fórmula F A→B:ci derivada, acotando la longitud de las ramas.
     // =====================================
-
+    
     @Test
     public void testRule9_F_A_IMPLIES_B_NewLabels() {
         System.out.println("\n=== TEST REGLA 9: F_A_IMPLIES_B_TA_FB — F→₁ sin proviso ===");
         System.out.println("F(P→Q):c0, sin T P en rama → proviso inactivo, F→₁ aplica.");
         System.out.println("  Crea nuevo label c3: T P:c3 y F Q:c3, con c0 ≤ c3.");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "F ->(P Q) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar T P con label nueva", treeOutput.contains("T P c3") && !treeOutput.contains("T P c0") && !treeOutput.contains("T P c1") && !treeOutput.contains("T P c2"));
             assertTrue("Debe generar F Q con label nueva", treeOutput.contains("F Q c3") && !treeOutput.contains("F Q c0") && !treeOutput.contains("T P c1") && !treeOutput.contains("T P c2"));
             assertTrue("Debe aplicar F_A_IMPLIES_B_TA_FB", treeOutput.contains("F_A_IMPLIES_B_TA_FB"));
@@ -631,16 +631,16 @@ public class IPLRulesComprehensiveTest {
         System.out.println("  F→₃ (F_IMPLIES_T_LEFT) aplica en cambio: F(P→Q):c0, T P:c0 → F Q:c0.");
         System.out.println("  Fundamento: §5 p.13 — 'F→₁ applicable only when T A:ch does");
         System.out.println("  not occur for any ch ⪯ ci'. Remark 5.2: acota creación de labels.");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "F ->(P Q) c0", "T P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("F→₁ NO debe aplicarse (proviso activo)", treeOutput.contains("F_A_IMPLIES_B_TA_FB"));
             assertFalse("NO debe crearse nuevo label c3 (T P c3)", treeOutput.contains("T P c3"));
             assertTrue("F→₃ (F_IMPLIES_T_LEFT) debe aplicarse en su lugar", treeOutput.contains("F_IMPLIES_T_LEFT"));
@@ -659,16 +659,16 @@ public class IPLRulesComprehensiveTest {
         System.out.println("  Por monotonía ascendente, T P:c0 y c0 ≤ c1 implican T P:c1 en b*.");
         System.out.println("  F→₁ NO debe aplicarse. F→₃ aplica: F(P→Q):c1, T P:c0, c0 ≤ c1 → F Q:c1.");
         System.out.println("  Fundamento: §5 p.13 — proviso verifica en b* (incluye monotonicidad).");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "F ->(P Q) c1", "T P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertFalse("F→₁ NO debe aplicarse (T P:c0 con c0 ≤ c1)", treeOutput.contains("F_A_IMPLIES_B_TA_FB"));
             assertTrue("F→₃ (F_IMPLIES_T_LEFT) debe aplicarse", treeOutput.contains("F_IMPLIES_T_LEFT"));
             assertTrue("Debe derivar F Q c1", treeOutput.contains("F Q c1"));
@@ -715,7 +715,7 @@ public class IPLRulesComprehensiveTest {
     //      completitud de rama (Algorithm 1, línea 21: "b* ← extend(b)"; y Def. 5.3),
     //      no para buscar premisas de reglas operacionales.
     // =====================================
-
+    
     @Test
     public void testRule10_T_NOT_GeneratesAllAccessibleLabels() {
         try {
@@ -723,10 +723,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T -P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c0 (cj = ci, el mínimo)", treeOutput.contains("F P c0"));
             assertTrue("Debe generar F P c1 (cj > ci)", treeOutput.contains("F P c1"));
             assertTrue("Debe generar F P c2 (cj = máximo en contexto)", treeOutput.contains("F P c2"));
@@ -743,10 +743,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T -P c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe generar F P c1 (cj = ci)", treeOutput.contains("F P c1"));
             assertTrue("Debe generar F P c2 (cj > ci)", treeOutput.contains("F P c2"));
             assertFalse("NO debe generar F P c0 (c0 < c1, no cumple c1 ≤ c0)", treeOutput.contains("F P c0"));
@@ -772,10 +772,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T -P c0", "F ->(Q R) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("F→ debe generar T Q en el nuevo label c3", treeOutput.contains("T Q c3"));
             assertTrue("F→ debe generar F R en el nuevo label c3", treeOutput.contains("F R c3"));
             // F P c3 solo puede venir de T_NOT re-disparando para c3:
@@ -802,10 +802,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T -P c0", "T +(P Q) c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("T_NOT debe generar físicamente F P c1 en b", treeOutput.contains("F P c1"));
             assertTrue("T∨₁ debe derivar T Q c1", treeOutput.contains("T Q c1"));
             assertTrue("Debe aplicar T_NOT", treeOutput.contains("T_NOT"));
@@ -823,16 +823,16 @@ public class IPLRulesComprehensiveTest {
         System.out.println("  En particular F P c1 ∈ b* (pues c0 ⪯ c1).");
         System.out.println("  Al agregar T P c1 al árbol, updateMultimap detecta T P c1 y F P c1 en b*");
         System.out.println("  con c1 ⪯ c1 → CIERRE inmediato (antes de aplicar T_NOT como paso explícito).");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "T -P c0", "T P c1");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe estar cerrado", proof.isClosed());
             // T_NOT no aparece como paso explícito en el árbol porque la rama se cierra
             // durante updateMultimap antes de que la estrategia tenga oportunidad de aplicar la regla.
@@ -943,21 +943,21 @@ public class IPLRulesComprehensiveTest {
     //   via (T¬): F ¬A : ck  (ck mínimo con ci ⪯ ck)
     //   via (F¬): T A : cj   (cj nuevo con ck ⪯ cj)
     // =====================================
-
+    
     @Test
     public void testDoubleNeg_TNotFNot_Chain() {
         System.out.println("\n=== TEST: Derivación de doble negación via T¬ + F¬ ===");
         System.out.println("T ¬¬P c0 → F ¬P ck (T¬) → T P cj (F¬)");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "T -(-P) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             assertTrue("Debe derivar T P con una etiqueta nueva mayor que c0",
                     treeOutput.contains("T P c3") && !treeOutput.contains("T P c0"));
             assertTrue("Debe aplicar la regla T_NOT (primer paso)", treeOutput.contains("T_NOT"));
@@ -966,7 +966,7 @@ public class IPLRulesComprehensiveTest {
             fail("Error en test derivación doble negación: " + e.getMessage());
         }
     }
-
+    
     @Test
     public void testDoubleNeg_TNotFNot_Chain_Complex() {
         System.out.println("\n=== TEST: Derivación de doble negación via T¬ + F¬ (fórmula compleja) ===");
@@ -977,7 +977,7 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulasWithContext(context, "T -(-(*(P Q))) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
 
@@ -1029,10 +1029,10 @@ public class IPLRulesComprehensiveTest {
             Proof proof = proveFormulas("F ->(*(->(P Q) -(-(P))) -(-(Q))) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             // La prueba requiere F¬ para crear labels (para ¬¬P y ¬¬Q)
             assertTrue("Debe aplicar F_NOT", treeOutput.contains("F_NOT"));
 
@@ -1046,7 +1046,7 @@ public class IPLRulesComprehensiveTest {
                     treeOutput.contains("T_IMPLIES_LEFT") || treeOutput.contains("T_AND"));
 
             System.out.println("✅ Propagación por monotonicidad (F¬): CORRECTA");
-
+            
         } catch (Exception e) {
             fail("Error en test propagación F¬: " + e.getMessage());
         }
@@ -1127,26 +1127,26 @@ public class IPLRulesComprehensiveTest {
             fail("Error en test closure: " + e.getMessage());
         }
     }
-    @Test
+    @Test 
     public void testNewLabelGetter_Behavior() {
         System.out.println("\n=== TEST NewLabelGetter (F_NOT) ===");
         System.out.println("F ¬P c0 → F P cj (cj nuevo, c0 ≤ cj)");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "F -P c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             // F_NOT debe generar F P con nueva label
             assertTrue("Debe generar F P", treeOutput.contains("T P c3"));
             assertTrue("Debe aplicar F_NOT", treeOutput.contains("F_NOT"));
-
+            
             System.out.println("✅ NewLabelGetter (F_NOT): Funcionando correctamente");
-
+            
         } catch (Exception e) {
             fail("Error en test NewLabelGetter: " + e.getMessage());
         }
@@ -1156,27 +1156,27 @@ public class IPLRulesComprehensiveTest {
     // TEST ESPECÍFICO: TERCIO EXCLUIDO NO VÁLIDO EN IPL
     // P ∨ ¬P NO debe cerrar en IPL
     // =====================================
-
+    
     @Test
     public void testLawOfExcludedMiddle_NotValidInIPL() {
         System.out.println("\n=== TEST TERCIO EXCLUIDO NO VÁLIDO EN IPL ===");
         System.out.println("F (P ∨ ¬P) → NO debe cerrar");
-
+        
         try {
             Context context = createContextWithRelations();
             Proof proof = proveFormulasWithContext(context, "F +(P -P) c0");
             IProofTree tree = proof.getProofTree();
             String treeOutput = tree.toString();
-
+            
             System.out.println("Árbol resultado:");
             System.out.println(treeOutput);
-
+            
             // P ∨ ¬P NO es válido en IPL
             assertFalse("P ∨ ¬P NO debe estar cerrado en IPL", proof.isClosed());
             assertTrue("Debe aplicar la regla F_OR", treeOutput.contains("F_OR"));
-
+            
             System.out.println("✅ TERCIO EXCLUIDO NO VÁLIDO EN IPL: CORRECTA");
-
+            
         } catch (Exception e) {
             fail("Error en test tercio excluido: " + e.getMessage());
         }

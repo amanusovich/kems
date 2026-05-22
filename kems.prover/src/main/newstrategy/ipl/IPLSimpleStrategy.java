@@ -11,6 +11,8 @@ import logicalSystems.ipl.IPLRuleStructures;
 import main.newstrategy.AbstractSimpleStrategy;
 import main.proofTree.IProofTree;
 import main.proofTree.SignedFormulaNode;
+import main.proofTree.SignedFormulaNodeState;
+import main.proofTree.origin.NamedOrigin;
 import logic.signedFormulas.SignedFormulaBuilder;
 import main.strategy.ClassicalProofTree;
 import main.strategy.IClassicalProofTree;
@@ -63,6 +65,33 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
     @Override
     public IProofTree createPTInstance(SignedFormulaNode root) {
         return new IPLProofTree(root);
+    }
+
+    /**
+     * Override of the parent factory method to avoid the synthetic
+     * T TOP / F BOTTOM nodes that {@link AbstractSimpleStrategy#createProofTree}
+     * prepends to every proof tree for classical-style strategies. Those
+     * nodes are not part of the IPL system of [labeled-ke-ipl] and have
+     * no functional role in the canonical procedure
+     * ({@link IPLCanonicalStrategyImplementation} skips them via
+     * {@code isTopOrBottom()}). The IPL proof tree starts with the input
+     * problem formula as its root, with origin {@code PROBLEM}.
+     */
+    @Override
+    protected IProofTree createProofTree(Problem p, SignedFormulaBuilder sfb) {
+        if (p.getFormulas() == null || p.getFormulas().size() == 0) {
+            throw new IllegalStateException("IPL problem must have at least one formula");
+        }
+        SignedFormula firstFormula = p.getFormulas().get(0);
+        SignedFormulaNode root = new SignedFormulaNode(firstFormula,
+                SignedFormulaNodeState.NOT_ANALYSED, NamedOrigin.PROBLEM);
+        IProofTree pt = createPTInstance(root);
+        for (int i = 1; i < p.getFormulas().size(); i++) {
+            SignedFormulaNode n = new SignedFormulaNode(p.getFormulas().get(i),
+                    SignedFormulaNodeState.NOT_ANALYSED, NamedOrigin.PROBLEM);
+            pt.addLast(n);
+        }
+        return pt;
     }
 
     @Override
