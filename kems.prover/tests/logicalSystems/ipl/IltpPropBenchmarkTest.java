@@ -107,8 +107,68 @@ public class IltpPropBenchmarkTest {
         assertFalse("SYJ207+1.001: Status (intuit.) Non-Theorem → expect not closed", proof.isClosed());
     }
 
-    /** Same pattern as {@link IPLRulesComprehensiveTest}: {@code tree.toString()} after proof. */
+    /**
+     * @deprecated Prefer {@link IltpBenchmarkRunner#main} for paper timings
+     * (warmup + median of 5 runs). This test prints a single cold run.
+     */
+    @Test
+    public void iltp_benchmark_report() throws Exception {
+        String[][] problems = {
+            {"SYJ", "SYJ201+1.001.p"},
+            {"SYJ", "SYJ207+1.001.p"},
+            {"SYN", "SYN001+1.p"},
+            {"SYN", "SYN041+1.p"},
+            {"SYN", "SYN046+1.p"},
+            {"LCL", "LCL181+1.p"},
+        };
+        System.out.println("ILTP_BENCH java.version=" + System.getProperty("java.version"));
+        for (String[] spec : problems) {
+            Path p = resolveProblem(spec[0], spec[1]);
+            assumeTrue("ILTP problem file missing: " + p, Files.isRegularFile(p));
+            BenchmarkResult r = benchmarkProblem(p);
+            String status = r.closed ? "closed" : "open";
+            System.out.printf("ILTP_BENCH %s status=%s time_ms=%d nodes=%d%n",
+                    spec[1].replace(".p", ""), status, r.timeMs, r.nodes);
+        }
+    }
+
+    private static final class BenchmarkResult {
+        final boolean closed;
+        final long timeMs;
+        final int nodes;
+
+        BenchmarkResult(boolean closed, long timeMs, int nodes) {
+            this.closed = closed;
+            this.timeMs = timeMs;
+            this.nodes = nodes;
+        }
+    }
+
+    private BenchmarkResult benchmarkProblem(Path path) throws Exception {
+        List<IltpProblemLoader.FofEntry> entries = IltpProblemLoader.load(path);
+        Assume.assumeFalse("No fof entries in " + path, entries.isEmpty());
+        StringBuilder lines = new StringBuilder();
+        for (IltpProblemLoader.FofEntry e : entries) {
+            String kems = IltpTptpFormulaConverter.toKemsIpl(e.tptpBody);
+            if ("axiom".equals(e.role)) {
+                lines.append("T ").append(kems).append(" c0\n");
+            } else if ("conjecture".equals(e.role)) {
+                lines.append("F ").append(kems).append(" c0\n");
+            }
+        }
+        String polish = lines.toString().trim();
+        long t0 = System.nanoTime();
+        Proof proof = proveText(polish);
+        long timeMs = (System.nanoTime() - t0) / 1_000_000L;
+        int nodes = proof.getProofTree().getNumberOfNodes();
+        return new BenchmarkResult(proof.isClosed(), timeMs, nodes);
+    }
+
+    /** Debug output for manual inspection; skipped in {@link #benchmarkProblem}. */
     private void printProofTree(Proof proof, Path problemFile) {
+        if (!Boolean.getBoolean("iltp.verbose")) {
+            return;
+        }
         IProofTree tree = proof.getProofTree();
         String treeOutput = tree.toString();
         System.out.println(problemFile.getFileName() + ":");
@@ -128,7 +188,17 @@ public class IltpPropBenchmarkTest {
                 lines.append("F ").append(kems).append(" c0\n");
             }
         }
-        return proveText(lines.toString().trim());
+        String polish = lines.toString().trim();
+        if (Boolean.getBoolean("iltp.verbose")) {
+            System.out.println();
+            System.out.println("========== " + path.getFileName() + " - frontend formula ==========");
+            System.out.println(polish);
+            System.out.println("===================================================================");
+            System.out.println();
+        }
+        Proof proof = proveText(polish);
+        printProofTree(proof, path);
+        return proof;
     }
 
     /**
