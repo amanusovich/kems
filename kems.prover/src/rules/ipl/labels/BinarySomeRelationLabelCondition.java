@@ -6,7 +6,7 @@ import logic.signedFormulas.SignedFormulaList;
 
 /**
  * @author placiana
- * Esta clase modela la condicion que exista una relacion entre Ci y Cj, en algun sentido.
+ * This class models the condition that there exists a relation between Ci and Cj, in either direction.
  * Ci <= Cj or Cj <= Ci
  *
  */

@@ -12,7 +12,6 @@ public class IPLColorScheme {
     public static final Color TWO_PREMISE = new Color(0, 0, 160);        // dark blue
     public static final Color PB          = new Color(180, 100, 0);      // orange
     public static final Color CLOSURE     = new Color(200, 0, 0);        // red
-    public static final Color PROPAGATION = new Color(128, 0, 128);      // purple
     public static final Color PROBLEM     = Color.BLACK;                 // black
     public static final Color DEFAULT     = Color.DARK_GRAY;
 
@@ -21,7 +20,6 @@ public class IPLColorScheme {
         String r = ruleName.toUpperCase();
         if (r.contains("CLOSE"))        return CLOSURE;
         if (r.contains("PB"))           return PB;
-        if (r.contains("PROPAGAT"))     return PROPAGATION;
         if (r.contains("PROBLEM") || r.contains("DEFINITION")) return PROBLEM;
         if (isTwoPremise(r))            return TWO_PREMISE;
         if (isOnePremise(r))            return ONE_PREMISE;
@@ -33,7 +31,6 @@ public class IPLColorScheme {
         String r = ruleName.toUpperCase();
         if (r.contains("CLOSE"))        return "closure";
         if (r.contains("PB"))           return "pb";
-        if (r.contains("PROPAGAT"))     return "propagation";
         if (r.contains("PROBLEM") || r.contains("DEFINITION")) return "problem";
         if (isTwoPremise(r))            return "two-premise";
         if (isOnePremise(r))            return "one-premise";
@@ -46,7 +43,6 @@ public class IPLColorScheme {
         String r = ruleName.toUpperCase();
         if (r.contains("CLOSE"))        return "CLOSURE";
         if (r.contains("PB"))           return "PB";
-        if (r.contains("PROPAGAT"))     return "PROPAGATION";
         if (isTwoPremise(r))            return "TWO_PREMISE";
         if (isOnePremise(r))            return "ONE_PREMISE";
         return "default";

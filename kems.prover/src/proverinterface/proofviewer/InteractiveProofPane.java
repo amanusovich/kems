@@ -80,8 +80,6 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 	/**
 	 * Optional predicate that controls which formula nodes are rendered.
 	 * If set, nodes for which the predicate returns {@code false} are hidden.
-	 * Used by IPLProofViewer to suppress PROPAGATION-origin nodes from the
-	 * main tree (those are surfaced separately in the b* Extensions panel).
 	 */
 	private java.util.function.Predicate<SignedFormulaNode> nodeFilter = null;
 
@@ -455,7 +453,7 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 
 			SignedFormulaNode sfn = (SignedFormulaNode) n;
 
-			// Apply node filter (e.g. hide PROPAGATION-origin nodes in IPL)
+			// Apply node filter, if one was set
 			if (nodeFilter != null && !nodeFilter.test(sfn)) {
 				continue; // do NOT advance isFirst — next visible node owns it
 			}

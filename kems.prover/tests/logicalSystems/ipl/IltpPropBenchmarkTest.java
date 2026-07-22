@@ -172,7 +172,7 @@ public class IltpPropBenchmarkTest {
         IProofTree tree = proof.getProofTree();
         String treeOutput = tree.toString();
         System.out.println(problemFile.getFileName() + ":");
-        System.out.println("Árbol resultado:");
+        System.out.println("Result tree:");
         System.out.println(treeOutput);
     }
 

@@ -424,7 +424,7 @@
 //
 //	@Test
 //    public void testRule10() {
-//	    // Regla 10
+//	    // Rule 10
 //	    /*
 //	    T not (A and B) : cI
 //	    T A : cJ
@@ -473,7 +473,7 @@
 //
 //    @Test
 //    public void testRule11() {
-//        // Regla 11
+//        // Rule 11
 //        /*
 //        T not (A and B) : cI
 //        T B : cJ
@@ -521,7 +521,7 @@
 //
 //    @Test
 //    public void testRule12() {
-//        // Regla 12
+//        // Rule 12
 //        /*
 //        T A imples B : cI
 //        T A : cJ
@@ -562,7 +562,7 @@
 //
 //    @Test
 //    public void testRule13() {
-//        // Regla 13
+//        // Rule 13
 //        /*
 //        T A imples B : cI
 //        F B : cJ
@@ -596,7 +596,7 @@
 //
 //    @Test
 //    public void testRule14() {
-//        // Regla 14
+//        // Rule 14
 //        /*
 //        F A imples B: cI
 //        -----------------
@@ -636,7 +636,7 @@
 //
 //    @Test
 //    public void testRule15() {
-//        // Regla 15
+//        // Rule 15
 //        /*
 //        T not (A implies B) : cI
 //        -----------------
@@ -676,7 +676,7 @@
 //
 //    @Test
 //    public void testRule16() {
-//        // Regla 16
+//        // Rule 16
 //        /*
 //        T (A implies B) : cI
 //        T not B : cJ
@@ -732,7 +732,7 @@
 //	    @Test
 //	    public void testRule17Not() {
 //	        /*
-//	         * Regla 17
+//	         * Rule 17
 //	         * F not A : cI
 //	         * ------------
 //	         *  T A : cJ
@@ -769,7 +769,7 @@
 //
 //    @Test
 //    public void testRule18() {
-//        // Regla 18
+//        // Rule 18
 //        /*
 //        T not not A : cI
 //        -----------------
@@ -806,7 +806,7 @@
 //    public void testRule17ManyConclussions() {
 //
 //        /*
-//         * Regla 17
+//         * Rule 17
 //         * F not A : cI
 //         * ------------
 //         *  T A : cJ

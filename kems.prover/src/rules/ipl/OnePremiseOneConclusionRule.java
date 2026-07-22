@@ -31,7 +31,7 @@ public class OnePremiseOneConclusionRule extends OneConclusionIPLRule {
 			return null;
 		}
 		*/
-	    // Verificación segura para IPL
+	    // Safe check for IPL
 	    LabelledFormulaFactory lff;
 	    if (sff instanceof LabelledFormulaFactory) {
 	        lff = (LabelledFormulaFactory) sff;

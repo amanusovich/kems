@@ -39,20 +39,20 @@ public class NewLabelGetter extends LabelGetter {
 		} else if ("AUX".equals(this.getterType)) {
 			return lfl.get(1).getLabel().getGreaterFormulaLabel();
 		} else if ("GLOBAL_NEW".equals(this.getterType)) {
-			// Generar una nueva etiqueta mayor que TODAS las existentes en el contexto
+			// Generate a new label greater than ALL existing ones in the context
 			FormulaLabel anyLabel = lfl.get(0).getLabel();
 			if (anyLabel instanceof ContextFormulaLabel) {
 				Context context = ((ContextFormulaLabel) anyLabel).getContext();
 				return context.getNewFormulaLabelGreaterThanCollection(context.getLabels());
 			} else {
-				// Fallback: crear un nuevo Context y convertir todas las labels existentes
+				// Fallback: create a new Context and convert every existing label
 				Context newContext = new Context();
 				for (int i = 0; i < lfl.size(); i++) {
 					FormulaLabel label = lfl.get(i).getLabel();
 					ContextFormulaLabel contextLabel = new ContextFormulaLabel(newContext, label.getIndex());
 					newContext.addElement(contextLabel);
 				}
-				// Generar una nueva etiqueta mayor que todas
+				// Generate a new label greater than all of them
 				return newContext.getNewFormulaLabelGreaterThanCollection(newContext.getLabels());
 			}
 		} else if ("BOTH".equals(this.getterType)) {

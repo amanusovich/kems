@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Esta clase modela la condicion que exista un label ck tal que
+ * This class models the condition that there exists a label ck such that
  * ci <= ck and cj <= cK
  */
 public class GreaterBinaryRelationLabelCondition implements LabelCondition {
@@ -20,7 +20,7 @@ public class GreaterBinaryRelationLabelCondition implements LabelCondition {
         LabelledFormula main = (LabelledFormula) lfl.get(0);
         LabelledFormula aux = (LabelledFormula) lfl.get(1);
         Context context = ((ContextFormulaLabel) main.getLabel()).getContext();
-        // Buscar todas las etiquetas en el contexto que sean >= maxLabel
+        // Find all labels in the context that are >= maxLabel
         List<FormulaLabel> candidateLabels = context.getLabels().stream()
             .filter(label -> context.isGreaterOrEqualTo(label, main.getLabel()) && context.isGreaterOrEqualTo(label, aux.getLabel()))
             .collect(Collectors.toList());

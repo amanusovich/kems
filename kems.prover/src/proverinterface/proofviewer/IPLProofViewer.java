@@ -9,7 +9,6 @@ import javax.swing.ScrollPaneConstants;
 import logicalSystems.ipl.IPLProofTree;
 import main.proofTree.IProofTree;
 import main.proofTree.SignedFormulaNode;
-import main.proofTree.origin.NamedOrigin;
 import main.tableau.IProof;
 import proverinterface.ProverInterface;
 
@@ -17,7 +16,7 @@ import proverinterface.ProverInterface;
  * IPL-specific ProofViewer that adds:
  *  - A Kripke context panel (top-right) showing the label partial order
  *  - A branch-detail panel (bottom-right) that updates when a formula is clicked,
- *    showing b* virtual extensions and rinstances for the clicked branch
+ *    showing the branch's rinstances
  */
 public class IPLProofViewer extends ProofViewer
         implements InteractiveProofPane.FormulaSelectionListener {
@@ -29,8 +28,7 @@ public class IPLProofViewer extends ProofViewer
 
     /**
      * The original IPLProofTree root (before ProofVerifier wraps it into
-     * ExtendedProofTree).  Used to access global rinstances and extendBranch()
-     * in the detail panel.
+     * ExtendedProofTree).  Used to access rinstances in the detail panel.
      */
     private IPLProofTree iplRootTree;
 
@@ -59,15 +57,6 @@ public class IPLProofViewer extends ProofViewer
 
         // Register as formula-selection listener on the interactive pane
         getInteractiveProofPane().setFormulaSelectionListener(this);
-
-        // Hide PROPAGATION-origin nodes from both main tree views.
-        // These formulas (Kripke monotonicity) belong conceptually to b* and are
-        // shown in the IPLBranchDetailPanel's "b* Extensions" tab instead.
-        java.util.function.Predicate<SignedFormulaNode> nonPropagated =
-            sfn -> sfn.getOrigin() == null
-                || !NamedOrigin.PROPAGATION.getName().equals(sfn.getOrigin().getName());
-        getInteractiveProofPane().setNodeFilter(nonPropagated);
-        getFullViewProofPane().setNodeFilter(nonPropagated);
     }
 
     @Override

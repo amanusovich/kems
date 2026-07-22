@@ -9,62 +9,62 @@ import logic.labelledFormulas.FormulaLabel;
 import logic.signedFormulas.SignedFormulaList;
 
 /**
- * LabelGetter que implementa la semántica IPL correcta:
- * Busca la etiqueta mínima existente que sea mayor o igual a ambas premisas.
- * Solo crea una nueva etiqueta si no existe ninguna que cumpla la condición.
+ * LabelGetter implementing the correct IPL semantics:
+ * Looks for the minimal existing label that is greater than or equal to both premises.
+ * Only creates a new label if none satisfies the condition.
  */
 public class MinimalGreaterLabelGetter extends LabelGetter {
 
     @Override
     public FormulaLabel getLabel(SignedFormulaList lfl) {
         if (lfl.size() < 2) {
-            // Para reglas de una premisa, usar la etiqueta de la premisa
+            // For one-premise rules, use the premise's own label
             return lfl.get(0).getLabel();
         }
 
-        // Obtener etiquetas de ambas premisas
+        // Get the labels of both premises
         FormulaLabel label1 = lfl.get(0).getLabel();
         FormulaLabel label2 = lfl.get(1).getLabel();
-        
-        // Si trabajamos con ContextFormulaLabel, buscar en el contexto
+
+        // If we are working with ContextFormulaLabel, search in the context
         if (label1 instanceof ContextFormulaLabel) {
             Context context = ((ContextFormulaLabel) label1).getContext();
             return findMinimalGreaterOrEqualLabel(context, label1, label2);
         } else {
-            // Sin contexto, usar etiquetas simples basadas en índices
+            // Without a context, use simple index-based labels
             return findMinimalGreaterOrEqualSimple(label1, label2);
         }
     }
-    
+
     /**
-     * Determina cuál de las dos etiquetas es mayor
+     * Determines which of the two labels is greater
      */
     private FormulaLabel getMaxLabel(FormulaLabel label1, FormulaLabel label2) {
-        // Comparar por índice para etiquetas simples
+        // Compare by index for simple labels
         if (label1.getIndex() >= label2.getIndex()) {
             return label1;
         } else {
             return label2;
         }
     }
-    
+
     /**
-     * Busca la etiqueta mínima existente en el contexto que sea >= ambas premisas.
-     * Si no existe ninguna, lanza una excepción porque la regla no debería aplicarse.
-     * 
-     * IMPORTANTE: Este método asume que la condición de existencia de tal etiqueta
-     * ya fue verificada antes de intentar aplicar la regla (por ejemplo, mediante
-     * GreaterBinaryRelationLabelCondition). Si no existe, la regla simplemente
-     * no se puede aplicar.
+     * Looks for the minimal existing label in the context that is >= both premises.
+     * If none exists, throws an exception because the rule should not have been applied.
+     *
+     * IMPORTANT: This method assumes the existence of such a label was already
+     * checked before attempting to apply the rule (e.g. via
+     * GreaterBinaryRelationLabelCondition). If it does not exist, the rule simply
+     * cannot be applied.
      */
     private FormulaLabel findMinimalGreaterOrEqualLabel(Context context, FormulaLabel label1, FormulaLabel label2) {
-        // Buscar todas las etiquetas en el contexto que sean >= ambas premisas
+        // Find every label in the context that is >= both premises
         List<FormulaLabel> candidateLabels = context.getLabels().stream()
             .filter(label -> context.isGreaterOrEqualTo(label, label1) && context.isGreaterOrEqualTo(label, label2))
             .collect(Collectors.toList());
-        
+
         if (!candidateLabels.isEmpty()) {
-            // Encontrar la mínima entre las candidatas (menor índice)
+            // Find the minimal one among the candidates (lowest index)
             FormulaLabel minimalCandidate = candidateLabels.get(0);
             for (FormulaLabel candidate : candidateLabels) {
                 if (candidate.getIndex() < minimalCandidate.getIndex()) {
@@ -73,22 +73,22 @@ public class MinimalGreaterLabelGetter extends LabelGetter {
             }
             return minimalCandidate;
         } else {
-            // No existe ninguna etiqueta que cumpla la condición
-            // Esto significa que la regla NO se puede aplicar
-            // La excepción indica que se intentó aplicar una regla cuando no se cumplía la condición
-            throw new RuntimeException("No candidate label found - rule condition not satisfied: " + 
+            // No label satisfies the condition.
+            // This means the rule CANNOT be applied.
+            // The exception signals that a rule was attempted while its condition did not hold.
+            throw new RuntimeException("No candidate label found - rule condition not satisfied: " +
                 "no label exists that is >= both " + label1 + " and " + label2);
         }
     }
-    
+
     /**
-     * Para etiquetas simples sin contexto, usar lógica basada en índices
+     * For simple labels with no context, use index-based logic
      */
     private FormulaLabel findMinimalGreaterOrEqualSimple(FormulaLabel label1, FormulaLabel label2) {
         FormulaLabel maxLabel = getMaxLabel(label1, label2);
-        
-        // En este caso simple, la etiqueta máxima ya es la respuesta correcta
-        // porque asumimos que las etiquetas están en orden y la máxima ya es >= ambas
+
+        // In this simple case, the maximum label is already the correct answer,
+        // since we assume the labels are ordered and the maximum is already >= both
         return maxLabel;
     }
 }

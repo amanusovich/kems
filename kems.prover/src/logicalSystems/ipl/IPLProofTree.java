@@ -9,10 +9,8 @@ import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import logic.formulas.Formula;
-// import logic.formulas.CompositeFormula;  // needed if T-NOT b* extension is re-enabled
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.FormulaSign;
-// import logic.signedFormulas.SignedFormulaFactory;  // needed if T-NOT b* extension is re-enabled
 import logic.labelledFormulas.LabelledFormula;
 import logic.labelledFormulas.FormulaLabel;
 import logic.labelledFormulas.ContextFormulaLabel;
@@ -28,51 +26,54 @@ import main.strategy.memorySaver.OptimizedClassicalProofTree;
 import main.newstrategy.ipl.IPLTracer;
 
 /**
- * ProofTree específico para IPL que implementa:
- * 1. Reglas de cierre correctas: T A: ci, F A: cj, ci ⪯ cj → ×
- * 2. Monotonicidad implícita via extendBranch() / b* extension
- * 3. Registro de instancias de reglas (rinstances) para evitar bucles
- * 4. Aislamiento de etiquetas por rama: cada rama tiene su propio espacio de etiquetas
+ * ProofTree specific to IPL, implementing:
+ * 1. Correct closure rule: T A: ci, F A: cj, ci <= cj -> x
+ * 2. Kripke monotonicity checked on demand, with no physical propagation
+ *    of formulas (see Definition 5.3 and IPLCanonicalStrategyImplementation)
+ * 3. Rule instance registration (rinstances) to prevent loops
+ * 4. Per-branch label isolation: each branch has its own label space
  *
- * Basado en el paper: "Free-variable KE tableaux for IPL", Algorithm 1.
+ * Based on the paper: "Free-variable KE tableaux for IPL", Algorithm 1.
  *
- * DISEÑO DE rinstances (reglas operacionales):
- *   Conjunto POR RAMA (per-branch) con búsqueda en ancestros. Cada rama tiene su
- *   propio conjunto local; wasRuleInstanceApplied recorre la cadena de ancestros.
- *   Esto garantiza que, dentro de un mismo camino de prueba (rama → ancestros),
- *   una instancia no se aplica dos veces (prevención de bucles), pero ramas en
- *   subtrees diferentes pueden aplicar la misma instancia independientemente
- *   (completitud).  Corresponde al significado correcto de "rinstances" del
- *   Algorithm 1 del paper: global al camino actual, no a todo el árbol.
+ * DESIGN OF rinstances (operational rules):
+ *   A PER-BRANCH set, searched through ancestors. Each branch has its own
+ *   local set; wasRuleInstanceApplied walks the ancestor chain. This
+ *   guarantees that, within a single proof path (branch -> ancestors), an
+ *   instance is not applied twice (loop prevention), while branches in
+ *   different subtrees can apply the same instance independently
+ *   (completeness). This matches the correct meaning of "rinstances" in
+ *   Algorithm 1 of the paper: global to the current path, not to the whole
+ *   tree.
  */
 public class IPLProofTree extends OptimizedClassicalProofTree {
 
     private static final IPLTracer tracer = IPLTracer.getInstance();
 
     /**
-     * Conjunto local de instancias de reglas operacionales registradas en ESTA rama.
-     * Cada rama tiene su propia copia. wasRuleInstanceApplied() recorre la cadena de
-     * ancestros para determinar si la instancia fue aplicada en el camino actual.
-     * Formato: "regla:premisa1:premisa2:..." (toString de las ls-fórmulas con labels).
+     * Local set of operational rule instances registered on THIS branch.
+     * Each branch has its own copy. wasRuleInstanceApplied() walks the
+     * ancestor chain to determine whether the instance was applied along
+     * the current path.
+     * Format: "rule:premise1:premise2:..." (toString of the ls-formulas with labels).
      */
     private Set<String> localRinstances;
 
     /**
-     * Branch ID: identificador único de esta rama.
-     * El tronco principal tiene ID "root".
-     * Las ramas creadas por bifurcación (PB) reciben IDs únicos.
-     * Se usa para el tracking de etiquetas (isLabelAccessible), pbRinstances y GUI.
+     * Branch ID: unique identifier of this branch.
+     * The main trunk has ID "root".
+     * Branches created by branching (PB) get unique IDs.
+     * Used for label tracking (isLabelAccessible), pbRinstances and the GUI.
      */
     private String branchId;
-    
+
     /**
-     * Mapa compartido que asocia cada etiqueta (por su toString()) con su branchId.
-     * Permite determinar qué etiquetas son accesibles en cada rama.
+     * Shared map associating each label (by its toString()) with its branchId.
+     * Used to determine which labels are accessible from each branch.
      */
     private Map<String, String> sharedLabelBranchMap;
 
     /**
-     * Contador estático para generar branch IDs únicos.
+     * Static counter used to generate unique branch IDs.
      */
     private static AtomicInteger branchIdCounter = new AtomicInteger(0);
 
@@ -94,10 +95,10 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         this.localRinstances = new java.util.LinkedHashSet<>();
         recordRinstancesSnapshot(aNode);
     }
-    
+
     /**
-     * Constructor para ramas hijas: comparten sharedLabelBranchMap pero cada una
-     * tiene su propio conjunto localRinstances vacío (búsqueda vía ancestros).
+     * Constructor for child branches: they share sharedLabelBranchMap but each
+     * one gets its own empty localRinstances set (looked up via ancestors).
      */
     private IPLProofTree(SignedFormulaNode aNode,
                          Map<String, String> sharedLabelBranchMap,
@@ -166,14 +167,14 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Verifica si una instancia de regla operacional ya fue aplicada en el camino
-     * de prueba actual (esta rama o cualquier ancestro).
-     * Implementa "r ∉ rinstances" del Algorithm 1 (líneas 7 y 10).
+     * Checks whether an operational rule instance was already applied along the
+     * current proof path (this branch or any ancestor).
+     * Implements "r not-in rinstances" from Algorithm 1 (lines 7 and 10).
      *
-     * @param ruleInstance la instancia de regla (formato: "regla:premisa1:premisa2")
+     * @param ruleInstance the rule instance (format: "rule:premise1:premise2")
      */
     public boolean wasRuleInstanceApplied(String ruleInstance) {
-        // Buscar en esta rama y en todos los ancestros
+        // Search this branch and every ancestor
         IPLProofTree current = this;
         while (current != null) {
             if (current.localRinstances.contains(ruleInstance)) {
@@ -186,10 +187,10 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Registra una instancia de regla operacional en el conjunto LOCAL de esta rama.
-     * Implementa "rinstances ← rinstances ∪ {r}" del Algorithm 1 (líneas 9, 13, 18).
+     * Registers an operational rule instance in this branch's LOCAL set.
+     * Implements "rinstances <- rinstances union {r}" from Algorithm 1 (lines 9, 13, 18).
      *
-     * @param ruleInstance la instancia de regla (formato: "regla:premisa1:premisa2")
+     * @param ruleInstance the rule instance (format: "rule:premise1:premise2")
      */
     public void registerRuleInstance(String ruleInstance) {
         localRinstances.add(ruleInstance);
@@ -199,18 +200,18 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * No-op: IPL no usa la lista _PBCandidates heredada de ClassicalProofTree.
-     * IPLPBRuleApplicator construye su propia lista de candidatos PB frescos con
-     * findAllCompositeFormulas() cada vez que los necesita, iterando directamente
-     * sobre los nodos del árbol. Mantener sincronizada la lista heredada sería
-     * trabajo innecesario, y el intento de remover fórmulas universales ya removidas
-     * (re-procesadas por Def. 5.6) generaría mensajes DEBUG espurios.
+     * No-op: IPL does not use the _PBCandidates list inherited from ClassicalProofTree.
+     * IPLPBRuleApplicator builds its own fresh PB candidate list with
+     * findAllCompositeFormulas() every time it needs one, iterating directly over
+     * the tree's nodes. Keeping the inherited list in sync would be unnecessary
+     * work, and attempting to remove universal formulas that were already removed
+     * (re-processed by Def. 5.3) would produce spurious DEBUG messages.
      */
     @Override
     public void removeFromPBCandidates(SignedFormula sf) { }
 
     /**
-     * Obtiene el branch ID de esta rama (para label tracking y GUI).
+     * Returns this branch's ID (for label tracking and the GUI).
      */
     public String getBranchId() {
         return branchId;
@@ -226,7 +227,7 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Returns all rule instances along the current path (root → … → this branch)
+     * Returns all rule instances along the current path (root -> ... -> this branch)
      * in insertion order. Ancestor instances come before the local ones, which
      * matches the temporal order in which they were registered while traversing
      * the proof tree. Used by the GUI / HTML export for the "rinstances" panel.
@@ -248,8 +249,8 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Registra una etiqueta con el branch ID actual.
-     * @return true si la etiqueta era nueva (no estaba registrada antes)
+     * Registers a label under the current branch ID.
+     * @return true if the label was new (not registered before)
      */
     public boolean registerLabel(FormulaLabel label) {
         if (label != null && sharedLabelBranchMap != null) {
@@ -259,97 +260,99 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                 if (IPLTracer.isEnabled()) {
                     tracer.logLabelRegistered(labelKey, branchId);
                 }
-                return true; // Etiqueta nueva
+                return true; // New label
             }
         }
-        return false; // Etiqueta ya existía
+        return false; // Label already existed
     }
-    
+
     /**
-     * Verifica si una etiqueta es accesible en la rama actual.
-     * Una etiqueta es accesible si:
-     * - Fue creada en el tronco común (branchId = "root")
-     * - Fue creada en esta rama (branchId == this.branchId)
-     * - Fue creada en alguna rama ancestra (padre, abuelo, etc.)
+     * Checks whether a label is accessible from the current branch.
+     * A label is accessible if:
+     * - It was created in the common trunk (branchId = "root")
+     * - It was created in this branch (branchId == this.branchId)
+     * - It was created in some ancestor branch (parent, grandparent, etc.)
      */
     public boolean isLabelAccessible(FormulaLabel label) {
         if (label == null) {
-            return true; // Las etiquetas nulas son siempre accesibles
+            return true; // Null labels are always accessible
         }
-        
-        // ✅ Verificación defensiva
+
+        // Defensive check
         if (sharedLabelBranchMap == null) {
-            return true; // Si no hay mapa, todas las etiquetas son accesibles
+            return true; // With no map, every label is accessible
         }
-        
+
         String labelKey = label.toString();
         String labelBranch = sharedLabelBranchMap.get(labelKey);
-        
+
         if (labelBranch == null) {
-            // Etiqueta no registrada, probablemente del sistema (TOP, BOTTOM)
+            // Unregistered label, likely a system one (TOP, BOTTOM)
             return true;
         }
-        
-        // Accesible si es del tronco común
+
+        // Accessible if it belongs to the common trunk
         if ("root".equals(labelBranch)) {
             return true;
         }
-        
-        // Accesible si es de esta rama
+
+        // Accessible if it belongs to this branch
         if (branchId.equals(labelBranch)) {
             return true;
         }
-        
+
         return isAncestorBranch(labelBranch);
     }
-    
+
     /**
-     * Verifica si una rama (identificada por su branchId) es ancestra de la rama actual.
-     * Recorre hacia arriba desde la rama actual usando getParent() hasta encontrar
-     * la rama especificada o hasta llegar a null (sin más padres).
-     * 
-     * Nota: Este método se llama solo si la etiqueta NO fue creada en "root" ni en
-     * la rama actual, así que solo buscamos en ramas ancestras intermedias.
-     * 
-     * @param ancestorBranchId el branchId de la rama ancestra a verificar
-     * @return true si la rama especificada es ancestra de la rama actual
+     * Checks whether a branch (identified by its branchId) is an ancestor of the
+     * current branch. Walks up from the current branch via getParent() until it
+     * finds the given branch or runs out of parents.
+     *
+     * Note: this method is only called when the label was NOT created in "root"
+     * nor in the current branch, so we only need to search intermediate ancestor
+     * branches.
+     *
+     * @param ancestorBranchId the branchId of the ancestor branch to check for
+     * @return true if the given branch is an ancestor of the current branch
      */
     private boolean isAncestorBranch(String ancestorBranchId) {
         IProofTree current = this.getParent();
-        
-        // Recorrer hacia arriba en la jerarquía de ramas
+
+        // Walk up through the branch hierarchy
         while (current != null) {
-            // Solo podemos verificar branchId si el padre es un IPLProofTree
+            // We can only check branchId when the parent is an IPLProofTree
             if (current instanceof IPLProofTree) {
                 IPLProofTree iplParent = (IPLProofTree) current;
                 String parentBranchId = iplParent.getBranchId();
-                
-                // Si encontramos la rama ancestra, retornar true
+
+                // Found the ancestor branch
                 if (ancestorBranchId.equals(parentBranchId)) {
                     return true;
                 }
-                
-                // Continuar con el siguiente ancestro
+
+                // Continue with the next ancestor
                 current = current.getParent();
             } else {
-                // Si el padre no es IPLProofTree, no podemos continuar
+                // Cannot continue if the parent is not an IPLProofTree
                 break;
             }
         }
-        
-        return false; // No encontramos la rama ancestra en la cadena de ancestros
+
+        return false; // The ancestor branch was not found in the ancestor chain
     }
-    
+
     /**
-     * ✅ EXTENSIÓN b* IMPLÍCITA: Override addLast para SOLO registrar etiquetas.
-     * 
-     * Ya NO propagamos fórmulas físicamente (monotonicidad explícita eliminada).
-     * La monotonicidad se maneja implícitamente a través de extendBranch() y isInExtendedBranch().
-     * 
-     * Esto previene:
-     * - Explosión de fórmulas en el árbol
-     * - Loops infinitos causados por reglas que generan nuevas etiquetas
-     * - Propagación innecesaria de fórmulas
+     * Override of addLast that ONLY registers labels.
+     *
+     * We do not physically propagate formulas by Kripke monotonicity: it is
+     * checked on demand, directly against the physical branch b (Definition 5.3,
+     * IPLCanonicalStrategyImplementation.isCompletelyAnalyzed).
+     *
+     * This prevents:
+     * - An explosion of formulas in the tree
+     * - Infinite loops caused by rules that generate new labels
+     * - Unnecessary propagation of formulas
      */
     @Override
     public void addLast(INode aNode) {
@@ -362,27 +365,24 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         SignedFormulaNode sfNode = (SignedFormulaNode) aNode;
         SignedFormula sf = (SignedFormula) sfNode.getContent();
 
-        // Registrar la etiqueta de esta fórmula en el branch actual
+        // Register this formula's label on the current branch
         if (sf instanceof LabelledFormula) {
             LabelledFormula lf = (LabelledFormula) sf;
             registerLabel(lf.getLabel());
         }
 
-        // Snapshot del estado de rinstances al momento de agregar el nodo
-        // (lo usa el visor para filtrar la vista de rinstances por nodo).
+        // Snapshot the rinstances state at the moment the node was added
+        // (used by the viewer to filter the rinstances view per node).
         recordRinstancesSnapshot(sfNode);
-
-        // La extensión b* se calcula dinámicamente cuando se necesita;
-        // no propagamos monotonicidad físicamente en el árbol.
     }
 
     @Override
     protected void updateMultimap(SignedFormulaNode aNode) {
-        // Para IPL, NO ejecutar la detección clásica, solo usar reglas IPL específicas
+        // For IPL, do NOT run the classical detection, only IPL-specific rules
         SignedFormula sf = (SignedFormula) aNode.getContent();
         getFsmm().put(sf.getFormula(), sf.getSign());
-        
-        // Verificar reglas de cierre IPL
+
+        // Check IPL closure rules
         if (detectIPLContradiction(aNode)) {
             if (IPLTracer.isEnabled()) {
                 tracer.logInfo("CONTRADICTION DETECTED for " + sf);
@@ -391,18 +391,20 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
             setLocallyClosed(true);
         }
     }
-    
+
     /**
-     * Detecta contradicciones según la regla de cierre IPL (Lemma 5.5):
-     *   T A:ci, F A:cj, ci ⪯ cj → ×
+     * Detects contradictions according to KEIPL's closure rule (Table 2):
+     *   T A:ci, F A:cj, ci <= cj -> x
      *
-     * La nueva fórmula ya está en b (insertada por super.addLast antes de updateMultimap).
-     * Se busca la fórmula de signo opuesto directamente en b físico (rama + ancestros),
-     * aplicando la relación ⪯ sobre las etiquetas constantes.
+     * The new formula is already in b (inserted by super.addLast before
+     * updateMultimap runs). We look for the opposite-sign formula directly in
+     * the physical branch b (branch + ancestors), applying the <= relation
+     * over the constant labels.
      *
-     * Esto es equivalente a chequear b* porque toda contradicción en b* se corresponde
-     * con una contradicción en b via la transitividad de ⪯ (ver IMPLEMENTACION_IPL.md §5).
-     * Iterar b directamente es O(n) en lugar de O(n²) de calcular b* completo.
+     * The closure rule is stated directly over the physical branch b (it
+     * requires no extended set), so iterating b directly is correct and
+     * sufficient -- and O(n) instead of the O(n^2) it would take to compute
+     * the full closure.
      */
     private boolean detectIPLContradiction(SignedFormulaNode aNode) {
         SignedFormula newSf = (SignedFormula) aNode.getContent();
@@ -418,8 +420,8 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         Context context = getContextFromLabel(newLabel);
         if (context == null) return false;
 
-        // T A:ci (nueva) → buscar F A:cj en b con ci ⪯ cj
-        // F A:cj (nueva) → buscar T A:ci en b con ci ⪯ cj
+        // T A:ci (new) -> look for F A:cj in b with ci <= cj
+        // F A:cj (new) -> look for T A:ci in b with ci <= cj
         FormulaSign oppositeSign = newSign.equals(IPLSigns.TRUE) ? IPLSigns.FALSE : IPLSigns.TRUE;
 
         IPLProofTree current = this;
@@ -436,7 +438,7 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                 FormulaLabel label = ((LabelledFormula) sf).getLabel();
                 if (label == null || !isLabelAccessible(label)) continue;
 
-                // ci = etiqueta de la fórmula T, cj = etiqueta de la fórmula F
+                // ci = label of the T formula, cj = label of the F formula
                 FormulaLabel ciLabel = newSign.equals(IPLSigns.TRUE) ? newLabel : label;
                 FormulaLabel cjLabel = newSign.equals(IPLSigns.TRUE) ? label : newLabel;
 
@@ -444,7 +446,7 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
                     if (IPLTracer.isEnabled()) {
                         tracer.logClosure(newFormula + " " + ciLabel,
                                 newFormula + " " + cjLabel,
-                                ciLabel + " ⪯ " + cjLabel);
+                                ciLabel + " \u2AAF " + cjLabel);
                     }
                     return true;
                 }
@@ -454,19 +456,34 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         }
         return false;
     }
-    
+
     /**
-     * Chequea contradicciones de la forma T A:ci, F A:cj, ci ⪯ cj iterando directamente
-     * sobre b físico (rama + ancestros) — Lemma 5.5.
+     * Returns the physical ls-formulas of the current branch (this branch's locals
+     * plus all ancestors), deduplicated, in insertion order.
      *
-     * Llamado al final de cada iteración del loop para capturar contradicciones que no
-     * fueron detectadas incrementalmente (e.g., cuando ambas fórmulas están solo en ancestros).
+     * Used by {@link main.newstrategy.ipl.IPLCanonicalStrategyImplementation} to
+     * evaluate the recursive "completely analyzed" predicate of Definition 5.3:
+     * that predicate recurses directly on b, never materializing a
+     * monotonic-closure set of composite ls-formulas.
+     */
+    public List<SignedFormula> getPhysicalFormulas() {
+        return collectPhysicalFormulas();
+    }
+
+    /**
+     * Checks for contradictions of the form T A:ci, F A:cj, ci <= cj by iterating
+     * directly over the physical branch b (branch + ancestors) -- the Table 2
+     * closure rule.
      *
-     * Aunque Lemma 5.5 está enunciado sobre b*, es suficiente iterar b físico:
-     * la monotonía de Def. 5.3 garantiza que toda contradicción en b* tiene testigos
-     * T A:ci y F A:cj con ci ⪯ cj en b (por transitividad de ⪯).
+     * Called at the end of every loop iteration to catch contradictions that
+     * were not detected incrementally (e.g. when both formulas live only in
+     * ancestors).
      *
-     * @return true si se encontró una contradicción y la rama fue marcada cerrada
+     * The closure rule is stated directly over the physical branch b (the paper
+     * defines no extended set for this), so iterating b is correct and
+     * sufficient on its own.
+     *
+     * @return true if a contradiction was found and the branch was marked closed
      */
     public boolean checkPhysicalBForContradiction() {
         if (isLocallyClosed()) return true;
@@ -506,7 +523,7 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Obtiene el Context desde una FormulaLabel (si es ContextFormulaLabel)
+     * Gets the Context from a FormulaLabel (if it is a ContextFormulaLabel)
      */
     private Context getContextFromLabel(FormulaLabel label) {
         if (label instanceof ContextFormulaLabel) {
@@ -514,13 +531,10 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         }
         return null;
     }
-    
-    // ✅ ELIMINADO: propagateRetroactiveMonotonicity()
-    // Ya no se necesita porque la monotonicidad se maneja implícitamente vía extendBranch()
-    
+
     /**
-     * Recolecta todas las fórmulas físicas de b (rama actual + ancestros), sin duplicados.
-     * Usado por detectIPLContradiction y checkPhysicalBForContradiction para iterar b directamente.
+     * Collects all physical formulas of b (current branch + ancestors), deduplicated.
+     * Used by detectIPLContradiction and checkPhysicalBForContradiction to iterate b directly.
      */
     private List<SignedFormula> collectPhysicalFormulas() {
         List<SignedFormula> result = new ArrayList<>();
@@ -542,41 +556,41 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Verifica si label1 ⪯ label2 en el contexto dado
+     * Checks whether label1 <= label2 in the given context
      */
     private boolean isLowerOrEqual(Context context, FormulaLabel label1, FormulaLabel label2) {
         if (label1.equals(label2)) {
-            return true; // Reflexiva: ci ⪯ ci
+            return true; // Reflexive: ci <= ci
         }
         return context.isLowerOrEqualTo(label1, label2);
     }
-    
+
     /**
-     * Busca una fórmula con signo específico en la rama actual y sus ancestras.
-     * Las ramas hijas heredan todas las fórmulas de las ramas ancestras, así que
-     * debemos buscar en toda la cadena de ancestros hasta la raíz.
-     * 
-     * NOTA: No buscamos en ramas hermanas, solo en la cadena de ancestros.
-     * Compara por equals() y toString() para manejar diferentes instancias de objetos.
-     * 
-     * @deprecated Usar findAllFormulasWithSign para buscar todas las instancias
+     * Looks up a formula with a specific sign in the current branch and its ancestors.
+     * Child branches inherit every formula from ancestor branches, so we must
+     * search the whole ancestor chain up to the root.
+     *
+     * NOTE: We do not search sibling branches, only the ancestor chain.
+     * Compares by equals() and toString() to handle different object instances.
+     *
+     * @deprecated Use findAllFormulasWithSign to look up every instance
      */
     private SignedFormula findFormulaWithSign(Formula formula, Object sign) {
         java.util.List<SignedFormula> results = findAllFormulasWithSign(formula, sign);
         return results.isEmpty() ? null : results.get(0);
     }
-    
+
     /**
-     * Busca TODAS las fórmulas con signo específico en la rama actual y sus ancestras.
-     * Las ramas hijas heredan todas las fórmulas de las ramas ancestras, así que
-     * debemos buscar en toda la cadena de ancestros hasta la raíz.
-     * 
-     * NOTA: No buscamos en ramas hermanas, solo en la cadena de ancestros.
-     * Compara por equals() y toString() para manejar diferentes instancias de objetos.
-     * 
-     * @param formula la fórmula a buscar
-     * @param sign el signo (T o F)
-     * @return lista de todas las SignedFormula encontradas con el signo y fórmula especificados
+     * Looks up ALL formulas with a specific sign in the current branch and its ancestors.
+     * Child branches inherit every formula from ancestor branches, so we must
+     * search the whole ancestor chain up to the root.
+     *
+     * NOTE: We do not search sibling branches, only the ancestor chain.
+     * Compares by equals() and toString() to handle different object instances.
+     *
+     * @param formula the formula to look up
+     * @param sign the sign (T or F)
+     * @return list of every SignedFormula found with the given sign and formula
      */
     private List<SignedFormula> findAllFormulasWithSign(Formula formula, Object sign) {
         List<SignedFormula> results = new ArrayList<>();
@@ -585,14 +599,14 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
             INode node = it.next();
             if (node instanceof SignedFormulaNode) {
                 SignedFormula sf = (SignedFormula) node.getContent();
-                
-                // Comparar por signo y por representación de fórmula (toString)
-                // Necesario porque diferentes instancias de FormulaSign pueden no ser equals()
-                boolean signMatches = sf.getSign().equals(sign) || 
+
+                // Compare by sign and by formula representation (toString)
+                // Needed because different FormulaSign instances may not be equals()
+                boolean signMatches = sf.getSign().equals(sign) ||
                                      sf.getSign().toString().equals(sign.toString());
-                boolean formulaMatches = sf.getFormula().equals(formula) || 
+                boolean formulaMatches = sf.getFormula().equals(formula) ||
                                         sf.getFormula().toString().equals(formula.toString());
-                
+
                 if (signMatches && formulaMatches) {
                     results.add(sf);
                 }
@@ -600,18 +614,18 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         }
         return results;
     }
-    
+
     /**
-     * Busca una fórmula con signo, fórmula y etiqueta específica en el grupo de accesibilidad
-     * (rama actual y sus ancestras).
-     * 
-     * Usado para verificar si las fórmulas que se generarían al aplicar PB ya existen,
-     * evitando así aplicar PB redundante.
-     * 
-     * @param formula la fórmula a buscar
-     * @param sign el signo (T o F)
-     * @param label la etiqueta específica a buscar
-     * @return la SignedFormula encontrada, o null si no existe
+     * Looks up a formula with a specific sign, formula and label within the
+     * accessibility group (current branch and its ancestors).
+     *
+     * Used to check whether the formulas that PB would generate already exist,
+     * so as to avoid applying PB redundantly.
+     *
+     * @param formula the formula to look up
+     * @param sign the sign (T or F)
+     * @param label the specific label to look up
+     * @return the SignedFormula found, or null if it does not exist
      */
     public SignedFormula findFormulaWithSignAndLabel(Formula formula, Object sign, FormulaLabel label) {
         IProofTreeVeryBasicIterator it = this.getTopDownIterator();
@@ -619,29 +633,29 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
             INode node = it.next();
             if (node instanceof SignedFormulaNode) {
                 SignedFormula sf = (SignedFormula) node.getContent();
-                
-                // Comparar signo
-                boolean signMatches = sf.getSign().equals(sign) || 
+
+                // Compare sign
+                boolean signMatches = sf.getSign().equals(sign) ||
                                      sf.getSign().toString().equals(sign.toString());
                 if (!signMatches) continue;
-                
-                // Comparar fórmula
-                boolean formulaMatches = sf.getFormula().equals(formula) || 
+
+                // Compare formula
+                boolean formulaMatches = sf.getFormula().equals(formula) ||
                                         sf.getFormula().toString().equals(formula.toString());
                 if (!formulaMatches) continue;
-                
-                // Comparar etiqueta (solo si ambas son LabelledFormula)
-                if (sf instanceof logic.labelledFormulas.LabelledFormula && 
+
+                // Compare label (only when both are LabelledFormula)
+                if (sf instanceof logic.labelledFormulas.LabelledFormula &&
                     label instanceof logic.labelledFormulas.ContextFormulaLabel) {
                     logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
                     FormulaLabel sfLabel = lf.getLabel();
-                    
-                    // Comparar etiquetas: deben ser iguales (mismo índice y mismo contexto)
+
+                    // Compare labels: they must be equal (same index and same context)
                     if (sfLabel.equals(label) || sfLabel.toString().equals(label.toString())) {
                         return sf;
                     }
                 } else if (sf instanceof logic.labelledFormulas.LabelledFormula) {
-                    // Si sf tiene etiqueta pero label no es ContextFormulaLabel, comparar toString
+                    // If sf has a label but label is not a ContextFormulaLabel, compare toString
                     logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
                     if (lf.getLabel().toString().equals(label.toString())) {
                         return sf;
@@ -651,298 +665,5 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         }
         return null;
     }
-    
-    /**
-     * Calcula la extension b* de la rama actual (Definition 5.3 + extension de implementacion).
-     *
-     * Definition 5.3 del paper define b* con estas condiciones ("nothing else is in b*"):
-     *   1. Todas las formulas en b
-     *   2. T A:cj in b*, para cada cj tal que ci <= cj y T A:ci in b  (monotonia T ascendente)
-     *   3. F A:ci in b*, para cada ci tal que ci <= cj y F A:cj in b  (monotonia F descendente)
-     *   4. (labels variables, Table 1 — no aplica en Table 2)
-     *
-     * Extension de implementacion (NOT en Definition 5.3, justificada por Definition 5.6):
-     *   5. Si T-NOT-A:ci in b, entonces F A:cj in b* para cada cj >= ci.
-     *      Permite deteccion de cierre anticipada sin esperar la aplicacion fisica de T-NOT.
-     *
-     * Este metodo calcula b* dinamicamente SIN agregar formulas fisicamente al arbol.
-     *
-     * @return Set de SignedFormula que representa b*
-     */
-    public Set<SignedFormula> extendBranch() {
-        return computeBStarFor(collectFormulasInPath(null));
-    }
 
-    /**
-     * Variante de {@link #extendBranch()} que computa b* "en el tiempo" de un
-     * nodo determinado: usa solo las fórmulas físicas que existían en la rama
-     * (esta + ancestros) en el momento en que {@code upTo} fue agregado, no
-     * todas las que están al cierre del proceso. Pensado para la GUI / HTML
-     * exporter: permite mostrar b* tal como se veía cuando el nodo seleccionado
-     * fue insertado.
-     *
-     * @param upTo nodo límite (inclusive). Si es {@code null}, equivale a
-     *             {@link #extendBranch()}.
-     * @return b* restringido al estado del árbol al tiempo de {@code upTo}.
-     */
-    public Set<SignedFormula> extendBranchUpTo(SignedFormulaNode upTo) {
-        return computeBStarFor(collectFormulasInPath(upTo));
-    }
-
-    /**
-     * Recolecta b (fórmulas físicas) en orden: esta rama (hasta {@code upTo}
-     * inclusive si no es null, o entera si es null), seguida de los ancestros
-     * completos. Los ancestros se incluyen siempre completos porque están
-     * congelados una vez que apareció la primera bifurcación.
-     */
-    private List<SignedFormula> collectFormulasInPath(SignedFormulaNode upTo) {
-        // LinkedHashSet de-duplica y conserva orden — varios ancestros podrían
-        // referenciar (por accidente) la misma instancia, lo que duplicaría la
-        // monotonía si lo agregáramos dos veces.
-        java.util.LinkedHashSet<SignedFormula> seen = new java.util.LinkedHashSet<>();
-        List<SignedFormula> formulasInB = new ArrayList<>();
-
-        // 1) Esta rama: iterar localmente y cortar si encontramos upTo
-        IProofTreeBasicIterator localIt = getLocalIterator();
-        while (localIt.hasNext()) {
-            INode node = localIt.next();
-            if (node instanceof SignedFormulaNode) {
-                SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
-                if (seen.add(sf)) formulasInB.add(sf);
-            }
-            if (upTo != null && node == upTo) {
-                break;
-            }
-        }
-
-        // 2) Ancestros: completos
-        IProofTree parent = getParent();
-        IPLProofTree currentTree = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
-        while (currentTree != null) {
-            IProofTreeBasicIterator it = currentTree.getLocalIterator();
-            while (it.hasNext()) {
-                INode node = it.next();
-                if (node instanceof SignedFormulaNode) {
-                    SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
-                    if (seen.add(sf)) formulasInB.add(sf);
-                }
-            }
-            IProofTree up = currentTree.getParent();
-            currentTree = (up instanceof IPLProofTree) ? (IPLProofTree) up : null;
-        }
-
-        return formulasInB;
-    }
-
-    /**
-     * Aplica las cláusulas de Definition 5.3 (monotonía) sobre una lista
-     * {@code b} explícita. Usada por {@link #extendBranch()} y por
-     * {@link #extendBranchUpTo(SignedFormulaNode)}.
-     */
-    private Set<SignedFormula> computeBStarFor(List<SignedFormula> formulasInB) {
-        // LinkedHashSet preserva orden de inserción → resultado determinista.
-        Set<SignedFormula> bStar = new java.util.LinkedHashSet<>(formulasInB);
-
-        // Obtener todas las etiquetas constantes en la rama (Cb).
-        Set<FormulaLabel> constantLabels = new java.util.LinkedHashSet<>();
-        for (SignedFormula sf : formulasInB) {
-            if (sf instanceof LabelledFormula) {
-                LabelledFormula lf = (LabelledFormula) sf;
-                FormulaLabel label = lf.getLabel();
-                if (label != null && label instanceof ContextFormulaLabel) {
-                    constantLabels.add(label);
-                }
-            }
-        }
-
-        Context context = null;
-        if (!constantLabels.isEmpty()) {
-            FormulaLabel anyLabel = constantLabels.iterator().next();
-            context = getContextFromLabel(anyLabel);
-        }
-
-        if (context == null) {
-            return bStar; // Sin Context, no hay monotonicidad
-        }
-        
-        // Regla 2: T A: cj ∈ b*, para cada cj ∈ Cb tal que ci ⪯b cj y T A: ci está en b
-        for (SignedFormula sf : formulasInB) {
-            if (sf.getSign().equals(IPLSigns.TRUE) && sf instanceof LabelledFormula) {
-                LabelledFormula lf = (LabelledFormula) sf;
-                FormulaLabel ci = lf.getLabel();
-                
-                if (ci == null || !isLabelAccessible(ci)) {
-                    continue;
-                }
-                
-                // Para cada cj ∈ Cb tal que ci ⪯ cj
-                for (FormulaLabel cj : constantLabels) {
-                    if (!isLabelAccessible(cj)) {
-                        continue;
-                    }
-                    
-                    if (!ci.equals(cj) && context.isLowerOrEqualTo(ci, cj)) {
-                        // Crear T A: cj
-                        SignedFormula baseSf = lf.getSignedFormula();
-                        LabelledFormula propagated = new LabelledFormula(cj, baseSf);
-                        bStar.add(propagated);
-                    }
-                }
-            }
-        }
-        
-        // Regla 3: F A: ci ∈ b*, para cada ci ∈ Cb tal que ci ⪯b cj y F A: cj está en b
-        for (SignedFormula sf : formulasInB) {
-            if (sf.getSign().equals(IPLSigns.FALSE) && sf instanceof LabelledFormula) {
-                LabelledFormula lf = (LabelledFormula) sf;
-                FormulaLabel cj = lf.getLabel();
-                
-                if (cj == null || !isLabelAccessible(cj)) {
-                    continue;
-                }
-                
-                // Para cada ci ∈ Cb tal que ci ⪯ cj
-                for (FormulaLabel ci : constantLabels) {
-                    if (!isLabelAccessible(ci)) {
-                        continue;
-                    }
-                    
-                    if (!ci.equals(cj) && context.isLowerOrEqualTo(ci, cj)) {
-                        // Crear F A: ci
-                        SignedFormula baseSf = lf.getSignedFormula();
-                        LabelledFormula propagated = new LabelledFormula(ci, baseSf);
-                        bStar.add(propagated);
-                    }
-                }
-            }
-        }
-        
-        // Regla 4: F A: cj ∈ b*, para cada cj ∈ Cb tal que ci ⪯b cj y F A: xi está en b
-        // Nota: Esta implementación usa Table 2 (sin variables), así que esta regla no aplica
-        // Si se implementaran variables en el futuro, se agregaría aquí
-        
-        // Extension de implementacion (Definition 5.6, NOT Definition 5.3):
-        // Si T-NOT-A: ci in b, entonces F A: cj in b* para cada cj >= ci.
-        // Definition 5.3 dice "nothing else is in b*" y no incluye este caso.
-        // Lo agregamos aqui porque Definition 5.6 requiere que T-NOT-A:ci este
-        // completamente analizada solo cuando F A:cj in b* para todo cj >= ci.
-        // Anticipar esto permite deteccion de cierre mas temprana sin generar
-        // F A:cj fisicamente primero. T-NOT genera esas formulas por re-seleccion
-        // via el chequeo de Def. 5.6 en selectUnanalyzedFormula.
-        //
-        // COMENTADO: esta extension va mas alla de Definition 5.3.
-        // El sistema sigue siendo correcto sin ella: T-NOT re-genera F A:cj en la
-        // siguiente iteracion via Def. 5.6, logrando el mismo cierre un paso despues.
-        //
-        // SignedFormulaFactory tempFactory = new SignedFormulaFactory();
-        // for (SignedFormula sf : formulasInB) {
-        //     if (sf.getSign().equals(IPLSigns.TRUE) && sf instanceof LabelledFormula) {
-        //         LabelledFormula lf = (LabelledFormula) sf;
-        //         Formula formula = lf.getFormula();
-        //         if (formula instanceof CompositeFormula) {
-        //             CompositeFormula comp = (CompositeFormula) formula;
-        //             if (comp.getConnective().equals(IPLConnectives.NOT)) {
-        //                 FormulaLabel ci = lf.getLabel();
-        //                 if (ci == null || !isLabelAccessible(ci)) {
-        //                     continue;
-        //                 }
-        //                 Formula innerA = comp.getImmediateSubformulas().get(0);
-        //                 for (FormulaLabel cj : constantLabels) {
-        //                     if (!isLabelAccessible(cj)) {
-        //                         continue;
-        //                     }
-        //                     if (context.isLowerOrEqualTo(ci, cj)) {
-        //                         SignedFormula innerSigned = tempFactory.createSignedFormula(IPLSigns.FALSE, innerA);
-        //                         LabelledFormula tneg_derived = new LabelledFormula(cj, innerSigned);
-        //                         bStar.add(tneg_derived);
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-        
-        return bStar;
-    }
-    
-    /**
-     * Verifica si una fórmula existe en la extensión b* de la rama actual.
-     * Esto es más eficiente que calcular toda b* cuando solo necesitamos verificar una fórmula.
-     * 
-     * @param formula la fórmula a buscar
-     * @return true si la fórmula está en b*, false en caso contrario
-     */
-    public boolean isInExtendedBranch(SignedFormula formula) {
-        // Primero verificar si está directamente en b
-        if (getNode(formula) != null) {
-            return true;
-        }
-        
-        // Si no está en b, verificar si puede derivarse por monotonicidad
-        if (!(formula instanceof LabelledFormula)) {
-            return false;
-        }
-        
-        LabelledFormula targetLf = (LabelledFormula) formula;
-        FormulaLabel targetLabel = targetLf.getLabel();
-        Formula targetFormula = targetLf.getFormula();
-        
-        if (targetLabel == null || !isLabelAccessible(targetLabel)) {
-            return false;
-        }
-        
-        Context context = getContextFromLabel(targetLabel);
-        if (context == null) {
-            return false;
-        }
-        
-        // Buscar fórmulas que puedan propagarse a targetFormula por monotonicidad
-        IProofTreeVeryBasicIterator it = this.getTopDownIterator();
-        while (it.hasNext()) {
-            INode node = it.next();
-            if (!(node instanceof SignedFormulaNode)) {
-                continue;
-            }
-            
-            SignedFormulaNode sfNode = (SignedFormulaNode) node;
-            SignedFormula sf = (SignedFormula) sfNode.getContent();
-            
-            if (!(sf instanceof LabelledFormula)) {
-                continue;
-            }
-            
-            LabelledFormula lf = (LabelledFormula) sf;
-            FormulaLabel label = lf.getLabel();
-            
-            if (label == null || !isLabelAccessible(label)) {
-                continue;
-            }
-            
-            // Verificar si las fórmulas coinciden (sin etiqueta)
-            if (!lf.getFormula().equals(targetFormula)) {
-                continue;
-            }
-            
-            // Verificar si los signos coinciden
-            if (lf.getSign() != targetLf.getSign()) {
-                continue;
-            }
-            
-            // Aplicar reglas de monotonicidad según Definition 5.3
-            if (targetLf.getSign().equals(IPLSigns.TRUE)) {
-                // Regla 2: T A: cj ∈ b* si T A: ci ∈ b y ci ⪯ cj
-                if (context.isLowerOrEqualTo(label, targetLabel)) {
-                    return true;
-                }
-            } else if (targetLf.getSign().equals(IPLSigns.FALSE)) {
-                // Regla 3: F A: ci ∈ b* si F A: cj ∈ b y ci ⪯ cj
-                if (context.isLowerOrEqualTo(targetLabel, label)) {
-                    return true;
-                }
-            }
-        }
-        
-        return false;
-    }
-    
 }

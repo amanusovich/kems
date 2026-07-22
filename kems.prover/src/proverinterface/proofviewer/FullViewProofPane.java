@@ -65,7 +65,6 @@ public class FullViewProofPane extends JPanel {
 	/**
 	 * Optional predicate to filter which formula nodes are painted.
 	 * Nodes for which the predicate returns {@code false} are skipped.
-	 * Used by IPLProofViewer to hide PROPAGATION-origin nodes.
 	 */
 	private java.util.function.Predicate<SignedFormulaNode> nodeFilter = null;
 
@@ -249,7 +248,7 @@ public class FullViewProofPane extends JPanel {
 			Node n = (Node) it.next();
 			SignedFormulaNode sfn = (SignedFormulaNode) n;
 
-			// Apply node filter (e.g. hide PROPAGATION-origin nodes in IPL)
+			// Apply node filter, if one was set
 			if (nodeFilter != null && !nodeFilter.test(sfn)) continue;
 			String s = proofViewer.isOriginEnabled() ? n.toString()
 					: sfn.getContent().toString();

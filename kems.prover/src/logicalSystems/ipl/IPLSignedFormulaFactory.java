@@ -15,175 +15,175 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Factory especializada para IPL que maneja correctamente Context y LabelledFormula.
- * Garantiza que todas las fórmulas IPL tengan las etiquetas y relaciones de orden correctas.
+ * Factory specialized for IPL that correctly manages Context and LabelledFormula.
+ * Guarantees that every IPL formula has the correct labels and order relations.
  */
 public class IPLSignedFormulaFactory extends LabelledFormulaFactory {
-    
+
     private Context context;
-    
+
     public IPLSignedFormulaFactory() {
         super();
         this.context = new Context();
     }
-    
+
     public IPLSignedFormulaFactory(Context context) {
         super();
         this.context = context;
     }
-    
+
     /**
-     * Crea una LabelledFormula con manejo automático de Context
+     * Creates a LabelledFormula with automatic Context handling
      */
     public LabelledFormula createLabelledFormula(FormulaSign aSign, Formula aFormula) {
-        // Crear nueva etiqueta usando el Context
+        // Create a new label using the Context
         FormulaLabel label = context.getNewFormulaLabel();
         SignedFormula sf = super.createSignedFormula(aSign, aFormula);
         return new LabelledFormula(label, sf);
     }
-    
+
     /**
-     * Sobrescribe el método de la superclase para usar nuestro Context
+     * Overrides the superclass method to use our Context
      */
     @Override
     public LabelledFormula createLabelledFormula(Context aContext, SignedFormula aSignedFormula) {
-        // Ignorar el context pasado y usar el nuestro
+        // Ignore the given context and use ours instead
         return new LabelledFormula(context.getNewFormulaLabel(), aSignedFormula);
     }
-    
+
     /**
-     * Sobrescribe para preservar la etiqueta existente si es ContextFormulaLabel,
-     * de lo contrario crear una nueva ContextFormulaLabel
+     * Overrides to preserve the existing label if it is a ContextFormulaLabel,
+     * otherwise creates a new ContextFormulaLabel
      */
     @Override
     public LabelledFormula createLabelledFormula(SignedFormula aSignedFormula) {
         if (aSignedFormula.getLabel() != null && aSignedFormula.getLabel() instanceof ContextFormulaLabel) {
-            // Preservar la ContextFormulaLabel existente
+            // Preserve the existing ContextFormulaLabel
             return new LabelledFormula(aSignedFormula.getLabel(), aSignedFormula);
         } else {
-            // Crear nueva ContextFormulaLabel usando nuestro Context
+            // Create a new ContextFormulaLabel using our Context
             return new LabelledFormula(context.getNewFormulaLabel(), aSignedFormula);
         }
     }
-    
+
     /**
-     * Sobrescribe para asegurar que siempre se use ContextFormulaLabel
+     * Overrides to ensure a ContextFormulaLabel is always used
      */
     @Override
     public LabelledFormula createLabelledFormula(FormulaLabel aFormulaLabel, SignedFormula aSignedFormula) {
         if (aFormulaLabel instanceof ContextFormulaLabel) {
             return new LabelledFormula(aFormulaLabel, aSignedFormula);
         } else {
-            // Convertir FormulaLabel simple a ContextFormulaLabel
+            // Convert a plain FormulaLabel to a ContextFormulaLabel
             ContextFormulaLabel contextLabel = new ContextFormulaLabel(context, aFormulaLabel.getIndex());
             context.addElement(contextLabel);
-            
-            // ✅ IMPORTANTE: Crear nuevo SignedFormula con ContextFormulaLabel
+
+            // Create a new SignedFormula with the ContextFormulaLabel
             SignedFormula newSignedFormula = super.createSignedFormula(
-                aSignedFormula.getSign(), 
-                aSignedFormula.getFormula(), 
+                aSignedFormula.getSign(),
+                aSignedFormula.getFormula(),
                 contextLabel
             );
-            
+
             return new LabelledFormula(contextLabel, newSignedFormula);
         }
     }
-    
+
     /**
-     * Crea una LabelledFormula con etiqueta que debe ser mayor que otra
+     * Creates a LabelledFormula whose label must be greater than another one
      */
     public LabelledFormula createLabelledFormulaGreaterThan(FormulaLabel baseLabel, FormulaSign aSign, Formula aFormula) {
         FormulaLabel newLabel = context.getNewFormulaLabelGreaterThan(baseLabel);
         SignedFormula sf = super.createSignedFormula(aSign, aFormula);
         return new LabelledFormula(newLabel, sf);
     }
-    
+
     /**
-     * Obtiene el Context usado por esta factory
+     * Returns the Context used by this factory
      */
     public Context getContext() {
         return context;
     }
-    
+
     /**
-     * Verifica si dos etiquetas son comparables en el orden parcial
+     * Checks whether two labels are comparable in the partial order
      */
     public boolean areLabelsComparable(FormulaLabel label1, FormulaLabel label2) {
         return context.areComparable(label1, label2);
     }
-    
+
     /**
-     * Verifica si label1 ≤ label2
+     * Checks whether label1 <= label2
      */
     public boolean isLowerOrEqual(FormulaLabel label1, FormulaLabel label2) {
         return context.isLowerOrEqualTo(label1, label2);
     }
-    
+
     /**
-     * Implementación especializada de cloneAll para IPL.
-     * Convierte automáticamente todas las fórmulas a usar ContextFormulaLabel
-     * y las registra en el Context compartido.
+     * IPL-specific implementation of cloneAll.
+     * Automatically converts every formula to use ContextFormulaLabel and
+     * registers them in the shared Context.
      */
     @Override
     public void cloneAll(SignedFormulaFactory sourceFactory, FormulaFactory ff) {
-        // Obtener todas las claves de las fórmulas en la factory origen
+        // Get every key from the formulas in the source factory
         Set<String> keys = sourceFactory.getSignedFormulas().keySet();
         List<String> keyList = new ArrayList<String>(keys);
 
         for (String key : keyList) {
-            // Verificar si ya existe en nuestra factory
+            // Check whether it already exists in our factory
             if (!this.getSignedFormulas().containsKey(key)) {
                 SignedFormula originalFormula = sourceFactory.getSignedFormulas().get(key);
 
-                // Convertir a IPL con ContextFormulaLabel
+                // Convert it to IPL with ContextFormulaLabel
                 LabelledFormula iplFormula = convertToIPLFormula(originalFormula, ff);
 
-                // Agregar a nuestra factory
+                // Add it to our factory
                 this.getSignedFormulas().put(key, iplFormula);
             }
         }
     }
-    
+
     /**
-     * Convierte una SignedFormula normal a LabelledFormula IPL con ContextFormulaLabel
+     * Converts a plain SignedFormula to an IPL LabelledFormula with ContextFormulaLabel
      */
     private LabelledFormula convertToIPLFormula(SignedFormula originalFormula, FormulaFactory ff) {
         FormulaLabel originalLabel = originalFormula.getLabel();
-        
-        // Determinar el índice de la etiqueta
+
+        // Determine the label's index
         int labelIndex;
         if (originalLabel == null || originalLabel.isEmpty()) {
-            // Sin etiqueta original, crear nueva
+            // No original label, create a new one
             labelIndex = context.getLabels().size();
         } else {
-            // Preservar el índice original
+            // Preserve the original index
             labelIndex = originalLabel.getIndex();
         }
-        
-        // Crear ContextFormulaLabel equivalente
+
+        // Create the equivalent ContextFormulaLabel
         ContextFormulaLabel contextLabel = new ContextFormulaLabel(context, labelIndex);
-        
-        // Registrar en el Context
+
+        // Register it in the Context
         if (!context.getLabels().contains(contextLabel)) {
             context.addElement(contextLabel);
         }
-        
-        // Clonar la fórmula usando FormulaFactory
+
+        // Clone the formula using FormulaFactory
         Formula clonedFormula = originalFormula.getFormula().clone(ff);
-        
-        // Crear nueva SignedFormula con ContextFormulaLabel
+
+        // Create a new SignedFormula with the ContextFormulaLabel
         SignedFormula newSignedFormula = super.createSignedFormula(
             originalFormula.getSign(),
             clonedFormula,
             contextLabel
         );
-        
-        // Crear LabelledFormula final
+
+        // Build the final LabelledFormula
         LabelledFormula result = new LabelledFormula(contextLabel, newSignedFormula);
-        
-        // Actualizar el registro de última fórmula agregada usando el método público
-        // Nota: Esto se actualiza automáticamente cuando agregamos la fórmula al mapa en cloneAll
-        
+
+        // The last-added-formula record is updated automatically when we add
+        // the formula to the map in cloneAll
+
         return result;
     }
 }

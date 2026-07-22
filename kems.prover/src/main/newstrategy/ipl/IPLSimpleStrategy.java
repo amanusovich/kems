@@ -54,8 +54,8 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
         // initialize proof transformations
         List<IProofTransformation> proofTransformations = new ArrayList<IProofTransformation>();
         
-        // ✅ HABILITADO: PBRuleApplicator específico para IPL como último recurso
-        // Se aplica cuando reglas de 2 premisas no pueden aplicarse por falta de premisa menor
+        // ENABLED: PBRuleApplicator specific to IPL, used as a last resort
+        // Applied when two-premise rules cannot fire because the minor premise is missing
         IPLPBRuleApplicator pbr = new IPLPBRuleApplicator(this, IPLRuleStructures.TWO_PREMISE_RULE_LIST);
         proofTransformations.add(pbr);
         
@@ -96,22 +96,22 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
 
     @Override
     public SignedFormulaList getLocalReferences(IClassicalProofTree proofTree, Formula formula) {
-        // Para IPL, implementamos una versión simplificada que no depende de FormulaReferenceClassicalProofTree
-        // TODO: Implementar correctamente para IPL si es necesario
+        // For IPL, we implement a simplified version that does not depend on FormulaReferenceClassicalProofTree
+        // TODO: implement properly for IPL if needed
         return new SignedFormulaList();
     }
 
     @Override
     public FormulaList getSubformulaLocalReferences(IClassicalProofTree proofTree, Formula formula, SignedFormula sf) {
-        // Para IPL, implementamos una versión simplificada que no depende de FormulaReferenceClassicalProofTree
-        // TODO: Implementar correctamente para IPL si es necesario
+        // For IPL, we implement a simplified version that does not depend on FormulaReferenceClassicalProofTree
+        // TODO: implement properly for IPL if needed
         return new FormulaList();
     }
 
     @Override
     public SignedFormulaList getParentReferences(IClassicalProofTree proofTree, Formula formula) {
-        // Para IPL, implementamos una versión simplificada que no depende de FormulaReferenceClassicalProofTree
-        // TODO: Implementar correctamente para IPL si es necesario
+        // For IPL, we implement a simplified version that does not depend on FormulaReferenceClassicalProofTree
+        // TODO: implement properly for IPL if needed
         return new SignedFormulaList();
     }
     
