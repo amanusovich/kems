@@ -17,7 +17,6 @@ import rules.ipl.labels.LessThanLabelCondition;
 import rules.ipl.labels.LabelGetter;
 import rules.ipl.labels.MinimalGreaterLabelGetter;
 import rules.ipl.labels.NewLabelGetter;
-import rules.ipl.labels.NoLabelCondition;
 
 /**
  * Rules (and patterns for these rules) for IPL.

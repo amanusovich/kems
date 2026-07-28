@@ -566,56 +566,6 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Looks up a formula with a specific sign in the current branch and its ancestors.
-     * Child branches inherit every formula from ancestor branches, so we must
-     * search the whole ancestor chain up to the root.
-     *
-     * NOTE: We do not search sibling branches, only the ancestor chain.
-     * Compares by equals() and toString() to handle different object instances.
-     *
-     * @deprecated Use findAllFormulasWithSign to look up every instance
-     */
-    private SignedFormula findFormulaWithSign(Formula formula, Object sign) {
-        java.util.List<SignedFormula> results = findAllFormulasWithSign(formula, sign);
-        return results.isEmpty() ? null : results.get(0);
-    }
-
-    /**
-     * Looks up ALL formulas with a specific sign in the current branch and its ancestors.
-     * Child branches inherit every formula from ancestor branches, so we must
-     * search the whole ancestor chain up to the root.
-     *
-     * NOTE: We do not search sibling branches, only the ancestor chain.
-     * Compares by equals() and toString() to handle different object instances.
-     *
-     * @param formula the formula to look up
-     * @param sign the sign (T or F)
-     * @return list of every SignedFormula found with the given sign and formula
-     */
-    private List<SignedFormula> findAllFormulasWithSign(Formula formula, Object sign) {
-        List<SignedFormula> results = new ArrayList<>();
-        IProofTreeVeryBasicIterator it = this.getTopDownIterator();
-        while (it.hasNext()) {
-            INode node = it.next();
-            if (node instanceof SignedFormulaNode) {
-                SignedFormula sf = (SignedFormula) node.getContent();
-
-                // Compare by sign and by formula representation (toString)
-                // Needed because different FormulaSign instances may not be equals()
-                boolean signMatches = sf.getSign().equals(sign) ||
-                                     sf.getSign().toString().equals(sign.toString());
-                boolean formulaMatches = sf.getFormula().equals(formula) ||
-                                        sf.getFormula().toString().equals(formula.toString());
-
-                if (signMatches && formulaMatches) {
-                    results.add(sf);
-                }
-            }
-        }
-        return results;
-    }
-
-    /**
      * Looks up a formula with a specific sign, formula and label within the
      * accessibility group (current branch and its ancestors).
      *

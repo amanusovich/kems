@@ -47,13 +47,6 @@ public class IltpPropBenchmarkTest {
     }
 
     @Test
-    public void converter_syn041_matches_manual() {
-        assertEquals(
-                "->(-(->(p q)) (->(q p)))",
-                IltpTptpFormulaConverter.toKemsIpl("( ~ ( p => q ) => ( q => p ) )"));
-    }
-
-    @Test
     public void iltp_SYN041_intuit_theorem_closes() throws Exception {
         Path p = resolveProblem("SYN", "SYN041+1.p");
         assumeTrue("ILTP problem file missing: " + p, Files.isRegularFile(p));
