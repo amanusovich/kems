@@ -161,9 +161,10 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     @Override
     protected void setOtherStructures(IProofTree pt, INode aNode) {
         super.setOtherStructures(pt, aNode);
-        if (pt instanceof IPLProofTree && aNode instanceof SignedFormulaNode) {
-            ((IPLProofTree) pt).recordRinstancesSnapshot((SignedFormulaNode) aNode);
-        }
+        // pt is always an IPLProofTree (makeInstance() only ever constructs one) and
+        // aNode is always a SignedFormulaNode (makeInstance() already casts it to one
+        // building pt, so a mismatch would have thrown before reaching this point).
+        ((IPLProofTree) pt).recordRinstancesSnapshot((SignedFormulaNode) aNode);
     }
 
     /**
@@ -317,26 +318,20 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
      * @return true if the given branch is an ancestor of the current branch
      */
     private boolean isAncestorBranch(String ancestorBranchId) {
+        // Every non-null ancestor of an IPLProofTree node is itself an IPLProofTree:
+        // setReferences() always sets a new child's parent to the IPLProofTree that
+        // created it (IPLProofTree.makeInstance()), and the root's parent is null,
+        // which ends this walk.
         IProofTree current = this.getParent();
 
-        // Walk up through the branch hierarchy
         while (current != null) {
-            // We can only check branchId when the parent is an IPLProofTree
-            if (current instanceof IPLProofTree) {
-                IPLProofTree iplParent = (IPLProofTree) current;
-                String parentBranchId = iplParent.getBranchId();
+            IPLProofTree iplParent = (IPLProofTree) current;
 
-                // Found the ancestor branch
-                if (ancestorBranchId.equals(parentBranchId)) {
-                    return true;
-                }
-
-                // Continue with the next ancestor
-                current = current.getParent();
-            } else {
-                // Cannot continue if the parent is not an IPLProofTree
-                break;
+            if (ancestorBranchId.equals(iplParent.getBranchId())) {
+                return true;
             }
+
+            current = current.getParent();
         }
 
         return false; // The ancestor branch was not found in the ancestor chain

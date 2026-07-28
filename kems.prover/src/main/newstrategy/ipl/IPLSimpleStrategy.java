@@ -72,9 +72,10 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
      * T TOP / F BOTTOM nodes that {@link AbstractSimpleStrategy#createProofTree}
      * prepends to every proof tree for classical-style strategies. Those
      * nodes are not part of the IPL system of [labeled-ke-ipl] and have
-     * no functional role in the canonical procedure
-     * ({@link IPLCanonicalStrategyImplementation} skips them via
-     * {@code isTopOrBottom()}). The IPL proof tree starts with the input
+     * no functional role in the canonical procedure: since this override
+     * replaces the parent factory method entirely, no TOP/BOTTOM node is
+     * ever created, so {@link IPLCanonicalStrategyImplementation} does not
+     * need to guard against them. The IPL proof tree starts with the input
      * problem formula as its root, with origin {@code PROBLEM}.
      */
     @Override

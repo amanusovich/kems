@@ -176,7 +176,7 @@ public class IPLRules {
 	        new KELabelledAction(
 	            ActionType.ADD_NODE,
 	            new SimpleSubformulaRoleGetter(KERuleRole.LEFT, IPLSigns.TRUE),
-	            LabelGetter.NEW  // Use NEW instead of GLOBAL_NEW
+	            LabelGetter.NEW
 	        ),                     // NEW creates a label greater than ci (the premise)
 	        new KELabelledAction( // without establishing relations with every label in the context
 	            ActionType.ADD_NODE,

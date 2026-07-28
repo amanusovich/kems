@@ -118,8 +118,10 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
             // For T-not, generate conclusions for ALL available greater labels
             boolean isTNot = isTNotFormula(sf);
 
-            // For regular rules (not T-not), check whether we already tried applying this rule to this formula
-            if (!isTNot && proofTree instanceof IPLProofTree) {
+            // For regular rules (not T-not), check whether we already tried applying this rule to this formula.
+            // proofTree is always an IPLProofTree: this applicator is only ever instantiated
+            // by IPLSimpleStrategy, whose createPTInstance() always constructs IPLProofTree nodes.
+            if (!isTNot) {
                 IPLProofTree iplTree = (IPLProofTree) proofTree;
 
                 // Every rule (including F_NOT) must track by formula + label:
@@ -177,7 +179,7 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
 
                     // For T-not (persistent), check rinstances of each individual conclusion,
                     // since it may generate multiple conclusions for different labels at different times
-                    if (isTNot && proofTree instanceof IPLProofTree) {
+                    if (isTNot) {
                         IPLProofTree iplTree = (IPLProofTree) proofTree;
                         String ruleInstance = createRuleInstanceKey(r.toString(), sf, newFormula);
                         if (iplTree.wasRuleInstanceApplied(ruleInstance)) {
@@ -254,14 +256,12 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
 
     private List<Rule> getOnePremiseRuleList(ClassicalProofTree cpt, SignedFormula sf) {
 
-        Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
-
-        // Check that this is really an IPLOnePremiseRuleList
-        if (!(ruleListObject instanceof IPLOnePremiseRuleList)) {
-            return new ArrayList<Rule>();
-        }
-
-        IPLOnePremiseRuleList onePremiseRules = (IPLOnePremiseRuleList) ruleListObject;
+        // strategy.getMethod().getRules().get(ruleListName) is always an
+        // IPLOnePremiseRuleList: ruleListName is always
+        // IPLRuleStructures.ONE_PREMISE_RULE_LIST (see IPLSimpleStrategy's
+        // constructor), which IPLRuleStructures always registers as one.
+        IPLOnePremiseRuleList onePremiseRules =
+                (IPLOnePremiseRuleList) strategy.getMethod().getRules().get(ruleListName);
 
         if (sf.getFormula() instanceof CompositeFormula) {
             return onePremiseRules.getMany(((CompositeFormula) sf.getFormula()).getConnective(), sf.getSign());
@@ -318,10 +318,9 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         // by monotonicity that is not already physically in b -- the search goes
         // "downward/equal", the opposite direction from where monotonicity
         // propagates. Iterating the physical branch is correct and sufficient.
-        if (!(proofTree instanceof IPLProofTree)) {
-            return false; // Fallback: do not block
-        }
-
+        // proofTree is always an IPLProofTree: this applicator is only ever
+        // instantiated by IPLSimpleStrategy, whose createPTInstance() always
+        // constructs IPLProofTree nodes.
         IPLProofTree iplTree = (IPLProofTree) proofTree;
         java.util.List<SignedFormula> physicalB = iplTree.getPhysicalFormulas();
 
@@ -436,12 +435,14 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         CompositeFormula comp = (CompositeFormula) baseSf.getFormula();
         Formula aFormula = comp.getImmediateSubformulas().get(0);
 
-        // Get the IPLProofTree to check label accessibility
-        IPLProofTree iplTree = (proofTree instanceof IPLProofTree) ? (IPLProofTree) proofTree : null;
+        // Get the IPLProofTree to check label accessibility (proofTree is always an
+        // IPLProofTree: this applicator is only ever instantiated by IPLSimpleStrategy,
+        // whose createPTInstance() always constructs IPLProofTree nodes)
+        IPLProofTree iplTree = (IPLProofTree) proofTree;
 
         for (FormulaLabel cjLabel : context.getLabels()) {
             // FILTER: only consider labels accessible from the current branch
-            if (iplTree != null && !iplTree.isLabelAccessible(cjLabel)) {
+            if (!iplTree.isLabelAccessible(cjLabel)) {
                 continue;
             }
             if (!ciLabel.equals(cjLabel) && !context.isLowerOrEqualTo(ciLabel, cjLabel)) {

@@ -78,23 +78,18 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         return tryToApplyPBAsLastResort(current, sfb, singleCandidateList);
     }
 
+    /**
+     * The sole caller, {@code IPLCanonicalStrategyImplementation.processOpenBranch()},
+     * only invokes this once {@code selectUnanalyzedFormula()} has already scanned the
+     * whole branch (locals plus ancestors) and found no candidate: every composite
+     * ls-formula there is therefore already ANALYSED (either genuinely completely
+     * analyzed, or because no operational rule could fire on it). There is nothing left
+     * to check here before proceeding straight to PB.
+     */
     @Override
     public boolean apply(ClassicalProofTree current, SignedFormulaBuilder sfb) {
         if (IPLTracer.isEnabled()) {
             tracer.logInfo("PB: starting as last resort");
-        }
-
-        // CRUCIAL: PB should only be applied if there are NO unanalyzed formulas (NOT_ANALYSED)
-        // If NOT_ANALYSED formulas remain, the operational rules still have work to do
-        if (hasUnanalysedFormulas(current)) {
-            if (IPLTracer.isEnabled()) {
-                tracer.logPBSkipped("(branch)", "unanalyzed formulas remain");
-            }
-            return false;
-        }
-
-        if (IPLTracer.isEnabled()) {
-            tracer.logInfo("PB: no unanalyzed formulas remain, PB can apply");
         }
 
         // Instead of relying only on getPBCandidates() (which may be empty if formulas were
@@ -113,37 +108,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
 
         if (IPLTracer.isEnabled()) {
             tracer.logPBSkipped("(branch)", "no composite candidates");
-        }
-        return false;
-    }
-
-    /**
-     * Checks whether there are unanalyzed (NOT_ANALYSED) formulas in the current branch.
-     * If there are, the operational rules still have work to do.
-     * If there are NO NOT_ANALYSED formulas (all are ANALYSED), PB is allowed, and PB will
-     * consider formulas from the current branch AND its ancestors via getTopDownIterator()
-     * in findAllCompositeFormulas().
-     *
-     * IMPORTANT: Only checks the current branch (not ancestors) to determine whether work
-     * remains. Once every formula in the current branch is ANALYSED, PB is allowed and it
-     * will then consider ancestors.
-     *
-     * All formulas are now marked ANALYSED normally; universal formulas (T(A->B), T(-A))
-     * are re-selected via Definition 5.3 in selectUnanalyzedFormula, so no exclusion is needed.
-     */
-    private boolean hasUnanalysedFormulas(ClassicalProofTree current) {
-        main.proofTree.iterator.IProofTreeBasicIterator it = current.getLocalIterator();
-        while (it.hasNext()) {
-            main.proofTree.INode node = it.next();
-            if (node instanceof SignedFormulaNode) {
-                SignedFormulaNode sfNode = (SignedFormulaNode) node;
-                if (sfNode.getState() == SignedFormulaNodeState.NOT_ANALYSED) {
-                    if (IPLTracer.isEnabled()) {
-                        tracer.logInfo("PB check: unanalyzed formula found: " + sfNode.getContent());
-                    }
-                    return true;
-                }
-            }
         }
         return false;
     }
@@ -212,10 +176,10 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         // ancestors (but not sibling branches). This allows PB to apply over ancestor formulas.
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = current.getTopDownIterator();
 
-        // Check label accessibility when running IPL
-        boolean checkAccessibility = current instanceof logicalSystems.ipl.IPLProofTree;
-        logicalSystems.ipl.IPLProofTree iplTree = checkAccessibility ?
-            (logicalSystems.ipl.IPLProofTree) current : null;
+        // current is always an IPLProofTree: this applicator is only ever
+        // instantiated by IPLSimpleStrategy, whose createPTInstance() always
+        // constructs IPLProofTree nodes.
+        logicalSystems.ipl.IPLProofTree iplTree = (logicalSystems.ipl.IPLProofTree) current;
 
         while (it.hasNext()) {
             main.proofTree.INode node = it.next();
@@ -235,7 +199,7 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             }
 
             // Check that the label is accessible in the current branch (for IPL)
-            if (checkAccessibility && sf instanceof logic.labelledFormulas.LabelledFormula) {
+            if (sf instanceof logic.labelledFormulas.LabelledFormula) {
                 logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
                 if (!iplTree.isLabelAccessible(lf.getLabel())) {
                     continue; // Skip formulas whose label is not accessible
@@ -356,11 +320,9 @@ public class IPLPBRuleApplicator implements IProofTransformation {
 
         CompositeFormula comp = (CompositeFormula) candidate.getFormula();
 
-        // Look up the two-premise rule structure
-        if (!(twoPremiseRulesList instanceof rules.structures.IPLConnectiveRoleSignRuleList)) {
-            return result;
-        }
-
+        // twoPremiseRulesList is always an IPLConnectiveRoleSignRuleList: its sole
+        // caller passes strategy.getMethod().getRules().get(TWO_PREMISE_RULE_LIST),
+        // which IPLRuleStructures always registers as one.
         rules.structures.IPLConnectiveRoleSignRuleList ruleList =
             (rules.structures.IPLConnectiveRoleSignRuleList) twoPremiseRulesList;
 
@@ -376,65 +338,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         }
 
         return result;
-    }
-
-    /**
-     * Dynamically looks through ALL two-premise rules for one where the candidate can be
-     * the major premise. Returns only the first applicable rule (legacy method kept for
-     * compatibility).
-     *
-     * Any two-premise rule is a PB candidate when:
-     * - The candidate matches the major-premise pattern
-     * - The minor premise does not exist in the tree
-     *
-     * PB will be applied to generate the missing minor premise.
-     */
-    private Rule findTwoPremiseRuleForCandidate(SignedFormula candidate, Object twoPremiseRulesList) {
-        // Only composite formulas can be major premises
-        if (!(candidate.getFormula() instanceof CompositeFormula)) {
-            return null;
-        }
-
-        CompositeFormula comp = (CompositeFormula) candidate.getFormula();
-
-        // Look up the two-premise rule structure
-        if (!(twoPremiseRulesList instanceof rules.structures.IPLConnectiveRoleSignRuleList)) {
-            return null;
-        }
-
-        rules.structures.IPLConnectiveRoleSignRuleList ruleList =
-            (rules.structures.IPLConnectiveRoleSignRuleList) twoPremiseRulesList;
-
-        // Look up matching rules in both roles (LEFT and RIGHT)
-        java.util.List<Rule> possibleRules = new java.util.ArrayList<Rule>();
-
-        java.util.List<Rule> leftRules = ruleList.getMany(comp.getConnective(), rules.KERuleRole.LEFT, candidate.getSign());
-        if (leftRules != null) {
-            possibleRules.addAll(leftRules);
-        }
-
-        java.util.List<Rule> rightRules = ruleList.getMany(comp.getConnective(), rules.KERuleRole.RIGHT, candidate.getSign());
-        if (rightRules != null) {
-            possibleRules.addAll(rightRules);
-        }
-
-        if (!possibleRules.isEmpty()) {
-            if (IPLTracer.isEnabled()) {
-                tracer.logInfo("PB: " + possibleRules.size() + " 2-premise rule candidates");
-            }
-            // Return the first matching rule
-            // (could be refined in the future to pick the best one)
-            Rule selectedRule = possibleRules.get(0);
-            if (IPLTracer.isEnabled()) {
-                tracer.logInfo("PB: selected rule: " + selectedRule);
-            }
-            return selectedRule;
-        }
-
-        if (IPLTracer.isEnabled()) {
-            tracer.logInfo("PB: no 2-premise rule found for " + candidate.getSign() + " " + comp.getConnective());
-        }
-        return null;
     }
 
     /**
@@ -515,52 +418,46 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     }
 
     /**
-     * Creates a SignedFormula appropriate for IPL (LabelledFormula with ContextFormulaLabel)
+     * Creates a SignedFormula appropriate for IPL (LabelledFormula with ContextFormulaLabel).
+     * {@code sfb}'s factory is always an {@link IPLSignedFormulaFactory} here: every entry
+     * point into the IPL strategy (GUI, web server, benchmark runner) constructs its
+     * {@code SignedFormulaCreator} with the literal package name {@code "ipl"}, which is
+     * the only condition under which that factory type is selected.
      */
     private SignedFormula createIPLSignedFormula(SignedFormulaBuilder sfb, FormulaSign sign, Formula formula) {
-        // For IPL, we need the LabelledFormula factory, which automatically creates a ContextFormulaLabel
-        if (sfb.getSignedFormulaFactory() instanceof IPLSignedFormulaFactory) {
-            IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) sfb.getSignedFormulaFactory();
-            // FIX: use createLabelledFormula instead of createSignedFormula
-            SignedFormula result = iplFactory.createLabelledFormula(sign, formula);
-            return result;
-        } else {
-            // Fallback: create a plain SignedFormula
-            SignedFormula result = sfb.createSignedFormula(sign, formula);
-            return result;
-        }
+        IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) sfb.getSignedFormulaFactory();
+        return iplFactory.createLabelledFormula(sign, formula);
     }
 
     /**
-     * Creates a SignedFormula appropriate for IPL with a specific label
+     * Creates a SignedFormula appropriate for IPL with a specific label.
+     * {@code sfb}'s factory is always an {@link IPLSignedFormulaFactory}, for the same
+     * reason as {@link #createIPLSignedFormula}. {@code label} itself, however, is not
+     * always already a {@code ContextFormulaLabel}: some callers pass a fresh label
+     * derived via {@code FormulaLabel.getGreaterFormulaLabel()} or similar, which
+     * produces a plain {@code FormulaLabel} not yet registered in the shared
+     * {@code Context} — that conversion below is genuinely needed.
      */
     private SignedFormula createIPLSignedFormulaWithLabel(SignedFormulaBuilder sfb, FormulaSign sign, Formula formula, FormulaLabel label) {
-        // For IPL, we need to create a LabelledFormula with ContextFormulaLabel
-        if (sfb.getSignedFormulaFactory() instanceof IPLSignedFormulaFactory) {
-            IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) sfb.getSignedFormulaFactory();
+        IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) sfb.getSignedFormulaFactory();
 
-            // Make sure the label is a ContextFormulaLabel
-            logic.labelledFormulas.ContextFormulaLabel contextLabel;
-            if (label instanceof logic.labelledFormulas.ContextFormulaLabel) {
-                contextLabel = (logic.labelledFormulas.ContextFormulaLabel) label;
-            } else {
-                // Convert FormulaLabel to ContextFormulaLabel using the factory's Context
-                contextLabel = new logic.labelledFormulas.ContextFormulaLabel(
-                    iplFactory.getContext(), label.getIndex());
-                // Make sure it is registered in the Context
-                if (!iplFactory.getContext().getLabels().contains(contextLabel)) {
-                    iplFactory.getContext().addElement(contextLabel);
-                }
-            }
-
-            // Create the SignedFormula with ContextFormulaLabel using the IPL factory
-            SignedFormula result = iplFactory.createLabelledFormula(contextLabel,
-                                    iplFactory.createSignedFormula(sign, formula));
-            return result;
+        // Make sure the label is a ContextFormulaLabel
+        logic.labelledFormulas.ContextFormulaLabel contextLabel;
+        if (label instanceof logic.labelledFormulas.ContextFormulaLabel) {
+            contextLabel = (logic.labelledFormulas.ContextFormulaLabel) label;
         } else {
-            // Fallback: create a plain SignedFormula
-            return sfb.createSignedFormula(sign, formula);
+            // Convert FormulaLabel to ContextFormulaLabel using the factory's Context
+            contextLabel = new logic.labelledFormulas.ContextFormulaLabel(
+                iplFactory.getContext(), label.getIndex());
+            // Make sure it is registered in the Context
+            if (!iplFactory.getContext().getLabels().contains(contextLabel)) {
+                iplFactory.getContext().addElement(contextLabel);
+            }
         }
+
+        // Create the SignedFormula with ContextFormulaLabel using the IPL factory
+        return iplFactory.createLabelledFormula(contextLabel,
+                                iplFactory.createSignedFormula(sign, formula));
     }
 
     /**
@@ -623,16 +520,14 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         }
 
         // STEP 3: If the minor premise already exists, the rule can fire directly -- do not apply PB
-        if (current instanceof IPLProofTree) {
-            IPLProofTree iplTree = (IPLProofTree) current;
-            SignedFormula existingRequired = iplTree.findFormulaWithSignAndLabel(
-                requiredAux.getFormula(), requiredAux.getSign(), contextSharedLabel);
-            if (existingRequired != null) {
-                if (IPLTracer.isEnabled()) {
-                    tracer.logPBSkipped(mainPremise.toString(), "required aux already exists: " + existingRequired);
-                }
-                return false;
+        // (current is always an IPLProofTree: see createIPLSignedFormula.)
+        SignedFormula existingRequired = ((IPLProofTree) current).findFormulaWithSignAndLabel(
+            requiredAux.getFormula(), requiredAux.getSign(), contextSharedLabel);
+        if (existingRequired != null) {
+            if (IPLTracer.isEnabled()) {
+                tracer.logPBSkipped(mainPremise.toString(), "required aux already exists: " + existingRequired);
             }
+            return false;
         }
 
         // STEP 4: Check rinstances -- if the instance was already applied, try alternative labels
@@ -641,7 +536,7 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         String ruleInstanceKey = rule.toString() + ":" + mainPremiseWithContextLabel.toString()
                 + ":" + auxWithSharedLabel.toString();
 
-        if (current instanceof IPLProofTree) {
+        {
             IPLProofTree iplTree = (IPLProofTree) current;
             if (iplTree.wasRuleInstanceApplied(ruleInstanceKey)) {
                 if (IPLTracer.isEnabled()) {
@@ -680,9 +575,7 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         // Register it BEFORE adding the conclusion to left (STEP 8) so the viewer's per-node
         // snapshot (recordRinstancesSnapshot in addLast) includes the rule that generated the
         // conclusion, the same way IPLOnePremiseRuleApplicator does it.
-        if (current instanceof IPLProofTree) {
-            ((IPLProofTree) current).registerRuleInstance(ruleInstanceKey);
-        }
+        ((IPLProofTree) current).registerRuleInstance(ruleInstanceKey);
 
         // STEP 8: Add the conclusion to the left branch
         left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED, strategy

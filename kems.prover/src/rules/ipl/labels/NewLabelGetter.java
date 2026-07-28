@@ -3,7 +3,6 @@ package rules.ipl.labels;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import logic.labelledFormulas.Context;
 import logic.labelledFormulas.ContextFormulaLabel;
 import logic.labelledFormulas.FormulaLabel;
 import logic.signedFormulas.SignedFormulaList;
@@ -13,8 +12,7 @@ public class NewLabelGetter extends LabelGetter {
 	public static final String MAIN = "MAIN";
 	public static final String AUX = "AUX";
 	public static final String BOTH = "BOTH";
-	public static final String GLOBAL_NEW = "GLOBAL_NEW";
-	
+
 
 	private String getterType;
 	private FormulaLabel computedLabel = null;
@@ -38,23 +36,6 @@ public class NewLabelGetter extends LabelGetter {
 			return this.computedLabel;
 		} else if ("AUX".equals(this.getterType)) {
 			return lfl.get(1).getLabel().getGreaterFormulaLabel();
-		} else if ("GLOBAL_NEW".equals(this.getterType)) {
-			// Generate a new label greater than ALL existing ones in the context
-			FormulaLabel anyLabel = lfl.get(0).getLabel();
-			if (anyLabel instanceof ContextFormulaLabel) {
-				Context context = ((ContextFormulaLabel) anyLabel).getContext();
-				return context.getNewFormulaLabelGreaterThanCollection(context.getLabels());
-			} else {
-				// Fallback: create a new Context and convert every existing label
-				Context newContext = new Context();
-				for (int i = 0; i < lfl.size(); i++) {
-					FormulaLabel label = lfl.get(i).getLabel();
-					ContextFormulaLabel contextLabel = new ContextFormulaLabel(newContext, label.getIndex());
-					newContext.addElement(contextLabel);
-				}
-				// Generate a new label greater than all of them
-				return newContext.getNewFormulaLabelGreaterThanCollection(newContext.getLabels());
-			}
 		} else if ("BOTH".equals(this.getterType)) {
 			// map labelled formula list to a collection of formula labels
 			List<FormulaLabel> labels = lfl.getList().stream().map(lf -> lf.getLabel()).collect(Collectors.toList());

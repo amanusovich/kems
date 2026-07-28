@@ -89,12 +89,14 @@ public class IPLCanonicalStrategyImplementation {
         this.twoPremiseApplicator = (IPLTwoPremiseRuleApplicator) strategy.getRuleApplicators().get(1);
         this.pbApplicator = (IPLPBRuleApplicator) strategy.getProofTransformations().get(0);
 
-        Object op = strategy.getMethod().getRules().get("onePremiseRules");
-        this.onePremiseRules = op instanceof rules.structures.OnePremiseRuleList
-                ? (rules.structures.OnePremiseRuleList) op : null;
-        Object tp = strategy.getMethod().getRules().get("twoPremiseRules");
-        this.twoPremiseRules = tp instanceof rules.structures.IPLConnectiveRoleSignRuleList
-                ? (rules.structures.IPLConnectiveRoleSignRuleList) tp : null;
+        // IPLRuleStructures always registers an IPLOnePremiseRuleList (which extends
+        // OnePremiseRuleList) under "onePremiseRules" and an
+        // IPLConnectiveRoleSignRuleList under "twoPremiseRules" — the only rule
+        // structure ever built for the IPL strategy.
+        this.onePremiseRules = (rules.structures.OnePremiseRuleList)
+                strategy.getMethod().getRules().get("onePremiseRules");
+        this.twoPremiseRules = (rules.structures.IPLConnectiveRoleSignRuleList)
+                strategy.getMethod().getRules().get("twoPremiseRules");
 
         if (IPLTracer.isEnabled()) {
             tracer.reset();
@@ -244,7 +246,6 @@ public class IPLCanonicalStrategyImplementation {
             INode node = it.next();
             if (!(node instanceof SignedFormulaNode)) continue;
             SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
-            if (isTopOrBottom(sf)) continue;
             if (!(sf instanceof LabelledFormula)) continue;
             if (!(sf.getFormula() instanceof CompositeFormula)) continue;
 
@@ -472,7 +473,6 @@ public class IPLCanonicalStrategyImplementation {
             SignedFormula sf = (SignedFormula) sfNode.getContent();
 
             if (failedFormulas.contains(sf)) continue;
-            if (isTopOrBottom(sf)) continue;
             if (!(sf.getFormula() instanceof CompositeFormula)) continue;
             if (!(sf instanceof LabelledFormula)) continue;
             LabelledFormula lf = (LabelledFormula) sf;
@@ -579,12 +579,4 @@ public class IPLCanonicalStrategyImplementation {
         }
     }
 
-    /**
-     * Checks if a formula is T⊤ or F⊥.
-     */
-    private boolean isTopOrBottom(SignedFormula sf) {
-        String formulaStr = sf.getFormula().toString();
-        return formulaStr.equals("TOP") || formulaStr.equals("BOTTOM");
-    }
-    
 }

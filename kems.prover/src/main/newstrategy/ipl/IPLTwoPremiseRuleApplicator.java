@@ -79,12 +79,12 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			return false;
 		}
 
-		Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
-		if (!(ruleListObject instanceof IPLConnectiveRoleSignRuleList)) {
-			return false;
-		}
-
-		IPLConnectiveRoleSignRuleList twoPremiseRules = (IPLConnectiveRoleSignRuleList) ruleListObject;
+		// strategy.getMethod().getRules().get(ruleListName) is always an
+		// IPLConnectiveRoleSignRuleList: ruleListName is always
+		// IPLRuleStructures.TWO_PREMISE_RULE_LIST (see IPLSimpleStrategy's
+		// constructor), which IPLRuleStructures always registers as one.
+		IPLConnectiveRoleSignRuleList twoPremiseRules =
+				(IPLConnectiveRoleSignRuleList) strategy.getMethod().getRules().get(ruleListName);
 
 		Connective mainConnective = ((CompositeFormula) mainCandidate.getFormula()).getConnective();
 		FormulaSign mainSign = mainCandidate.getSign();
@@ -122,14 +122,8 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 		// auxiliary candidates; if found, apply the rule
 		boolean hasApplied = false;
 
-		Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
-
-		// Check that this is really an IPLConnectiveRoleSignRuleList
-		if (!(ruleListObject instanceof IPLConnectiveRoleSignRuleList)) {
-			return false;
-		}
-
-		IPLConnectiveRoleSignRuleList twoPremiseRules = (IPLConnectiveRoleSignRuleList) ruleListObject;
+		IPLConnectiveRoleSignRuleList twoPremiseRules =
+				(IPLConnectiveRoleSignRuleList) strategy.getMethod().getRules().get(ruleListName);
 
 		SignedFormula mainCandidate;
 
@@ -322,14 +316,14 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 				continue;
 			}
 
-			// Check label accessibility
-			if (proofTree instanceof logicalSystems.ipl.IPLProofTree) {
-				logicalSystems.ipl.IPLProofTree iplTree = (logicalSystems.ipl.IPLProofTree) proofTree;
-				if (sf instanceof logic.labelledFormulas.LabelledFormula) {
-					logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
-					if (!iplTree.isLabelAccessible(lf.getLabel())) {
-						continue;
-					}
+			// Check label accessibility (proofTree is always an IPLProofTree: this
+			// applicator is only ever instantiated by IPLSimpleStrategy, whose
+			// createPTInstance() always constructs IPLProofTree nodes)
+			logicalSystems.ipl.IPLProofTree iplTree = (logicalSystems.ipl.IPLProofTree) proofTree;
+			if (sf instanceof logic.labelledFormulas.LabelledFormula) {
+				logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
+				if (!iplTree.isLabelAccessible(lf.getLabel())) {
+					continue;
 				}
 			}
 
@@ -451,17 +445,19 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			SignedFormula auxCandidate) {
 		boolean hasApplied = false;
 
+		// proofTree is always an IPLProofTree: this applicator is only ever
+		// instantiated by IPLSimpleStrategy, whose createPTInstance() always
+		// constructs IPLProofTree nodes.
+		IPLProofTree iplTree = (IPLProofTree) proofTree;
+
 		// Check rinstances to prevent loops
 		String ruleInstance = createRuleInstanceKey(aRule.toString(), mainCandidate, auxCandidate);
-		if (proofTree instanceof IPLProofTree) {
-			IPLProofTree iplTree = (IPLProofTree) proofTree;
-			if (iplTree.wasRuleInstanceApplied(ruleInstance)) {
-				if (IPLTracer.isEnabled()) {
-					tracer.logRuleBlocked(aRule.toString(), mainCandidate.toString(),
-							"rinstance exists: " + ruleInstance);
-				}
-				return false; // Do not apply, it was already applied
+		if (iplTree.wasRuleInstanceApplied(ruleInstance)) {
+			if (IPLTracer.isEnabled()) {
+				tracer.logRuleBlocked(aRule.toString(), mainCandidate.toString(),
+						"rinstance exists: " + ruleInstance);
 			}
+			return false; // Do not apply, it was already applied
 		}
 
 		sfl.add(0, mainCandidate);
@@ -475,10 +471,7 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
 			// Always register in rinstances when a conclusion is generated
 			// (even if it already exists in the tree) to prevent infinite retries
-			if (proofTree instanceof IPLProofTree) {
-				IPLProofTree iplTree = (IPLProofTree) proofTree;
-				iplTree.registerRuleInstance(ruleInstance);
-			}
+			iplTree.registerRuleInstance(ruleInstance);
 
 			if (!conclusionExists) {
 				// Only add it to the tree if it does not already exist
