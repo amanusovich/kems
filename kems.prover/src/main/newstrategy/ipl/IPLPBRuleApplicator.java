@@ -82,9 +82,9 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      * The sole caller, {@code IPLCanonicalStrategyImplementation.processOpenBranch()},
      * only invokes this once {@code selectUnanalyzedFormula()} has already scanned the
      * whole branch (locals plus ancestors) and found no candidate: every composite
-     * ls-formula there is therefore already ANALYSED (either genuinely completely
-     * analyzed, or because no operational rule could fire on it). There is nothing left
-     * to check here before proceeding straight to PB.
+     * ls-formula there is either completely analyzed per Definition 5.3, or is one on
+     * which no operational rule could fire — which is exactly the situation PB exists
+     * to resolve. There is nothing left to check here before proceeding straight to PB.
      */
     @Override
     public boolean apply(ClassicalProofTree current, SignedFormulaBuilder sfb) {
@@ -586,11 +586,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             tracer.logPBApplied(mainPremise.toString(), rule.toString(), auxWithSharedLabel.toString(), "left", "right");
         }
 
-        // Mark ANALYSED in both branches. Universal formulas (T(A->B), T(-A)) will be
-        // re-selected by selectUnanalyzedFormula when Definition 5.3 is unsatisfied for new worlds.
-        left.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
-        right.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
-
         return true;
     }
 
@@ -695,11 +690,6 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                 tracer.logPBApplied(mainPremise.toString(), rule.toString(),
                         auxWithCj.toString(), "left", "right");
             }
-
-            // Mark ANALYSED in both branches; Definition 5.3 re-check in selectUnanalyzedFormula
-            // handles re-selection of universal formulas when new worlds appear.
-            left.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
-            right.removeFromPBCandidates(mainPremise, SignedFormulaNodeState.ANALYSED);
 
             return true;
         }

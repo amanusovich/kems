@@ -176,11 +176,8 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 		}
 	}
 
-	// If no rule was applied (because the auxiliary premise is missing),
-	// mark it ANALYSED so PB can generate the missing premise
-	if (!appliedAny && (leftRules.size() > 0 || rightRules.size() > 0)) {
-		strategy.getCurrent().removeFromPBCandidates(mainCandidate, SignedFormulaNodeState.ANALYSED);
-	}
+	// If no rule was applied the auxiliary premise is missing; PB will generate it
+	// once selection can no longer make progress (see IPLPBRuleApplicator).
 
 	hasApplied = hasApplied || appliedAny;
 
@@ -479,12 +476,6 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 						SignedFormulaNodeState.NOT_ANALYSED, strategy
 						.createOrigin(aRule, proofTree.getNode(mainCandidate),
 								proofTree.getNode(auxCandidate))));
-
-				// Mark as ANALYSED unconditionally. Universal formulas (T(A->B), T(-A))
-				// are re-selected by selectUnanalyzedFormula whenever Definition 5.3 is
-				// not yet satisfied for new accessible worlds.
-				strategy.getCurrent().removeFromPBCandidates(mainCandidate,
-						SignedFormulaNodeState.ANALYSED);
 
 				hasApplied = true;
 			}

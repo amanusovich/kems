@@ -215,9 +215,6 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                 // Only mark as applied if we actually added new formulas
                 if (actuallyAddedFormula) {
                     hasApplied = true;
-                    // Mark ANALYSED unconditionally. Universal T-not formulas are re-selected by
-                    // selectUnanalyzedFormula when Def. 5.3 is unsatisfied for new accessible worlds.
-                    proofTree.removeFromPBCandidates(sf, SignedFormulaNodeState.ANALYSED);
                 }
             }
 

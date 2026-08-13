@@ -18,7 +18,6 @@ import logic.labelledFormulas.Context;
 import main.proofTree.INode;
 import main.proofTree.IProofTree;
 import main.proofTree.SignedFormulaNode;
-import main.proofTree.SignedFormulaNodeState;
 import main.proofTree.iterator.IProofTreeBasicIterator;
 import main.proofTree.iterator.IProofTreeVeryBasicIterator;
 import main.proofTree.origin.IOrigin;

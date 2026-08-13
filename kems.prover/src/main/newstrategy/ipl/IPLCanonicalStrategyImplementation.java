@@ -19,7 +19,6 @@ import main.newstrategy.ISimpleStrategy;
 import main.proofTree.INode;
 import main.proofTree.IProofTree;
 import main.proofTree.SignedFormulaNode;
-import main.proofTree.SignedFormulaNodeState;
 import logic.signedFormulas.SignedFormulaBuilder;
 import main.strategy.ClassicalProofTree;
 import logic.signedFormulas.SignedFormula;
@@ -56,6 +55,30 @@ import logic.signedFormulas.SignedFormula;
  *
  * Formulas are selected ONLY from the physical branch b (Algorithm 1, line 6); no
  * eager or lazy materialization of derived formulas into b is performed.
+ *
+ * <p><b>On the inherited node status flag.</b> {@code SignedFormulaNode} carries a
+ * NOT_ANALYSED/ANALYSED/FULFILLED status used by the classical KE strategies this
+ * infrastructure is shared with. The IPL strategy deliberately does not participate
+ * in it: it never writes ANALYSED and never reads the status to make a decision.
+ * Two invariants replace it, and together they are what make deferring PB safe:
+ *
+ * <ul>
+ *   <li><i>Candidacy</i> is decided solely by {@link #isCompletelyAnalyzed}, i.e. by
+ *       Definition 5.3 re-evaluated against the branch on every scan. Nothing is
+ *       cached on the node, so a formula that stops being completely analyzed —
+ *       which is exactly what happens to T(A→B) and T(¬A) when a new constant
+ *       appears — becomes a candidate again on its own.</li>
+ *   <li><i>Termination of the branch</i> is decided solely by {@link #checkBranchDone},
+ *       i.e. closure or {@link #isBranchCompletePerDef53}: both direct re-evaluations
+ *       of the paper's own predicates.</li>
+ * </ul>
+ *
+ * Re-selecting a formula on which no rule could fire is prevented, for the current
+ * round only, by the {@code failedFormulas} set in {@link #processOpenBranch} — which
+ * is cleared as soon as any rule fires, so no formula is ever permanently excluded on
+ * the strength of past bookkeeping. Deferring PB to the point where selection can no
+ * longer make progress therefore changes only <i>when</i> a branching step happens,
+ * never <i>which</i> formulas the procedure still considers analyzable.
  */
 public class IPLCanonicalStrategyImplementation {
     
@@ -428,26 +451,25 @@ public class IPLCanonicalStrategyImplementation {
     /**
      * Algorithm 1, line 6: "select a φ in b which is not completely analyzed in b".
      *
-     * Selection is decided exclusively by Definition 5.3: a formula
-     * is a candidate iff it is NOT completely analyzed (per
-     * {@link #isCompletelyAnalyzed}). The internal NOT_ANALYSED/ANALYSED flag is
-     * not consulted to decide candidacy — it is kept only as an optimisation
-     * signal for {@link IPLPBRuleApplicator} (which uses it to detect "no work
-     * pending" before invoking PB).
+     * Candidacy is decided exclusively by Definition 5.3: a formula is a candidate
+     * iff it is NOT completely analyzed (per {@link #isCompletelyAnalyzed}), which
+     * is re-evaluated against the current branch on every scan. The node-level
+     * NOT_ANALYSED/ANALYSED status inherited from the classical KE infrastructure
+     * plays no part in this decision, and the IPL strategy never writes it (see the
+     * class comment).
      *
      * Consequences:
      * - Universal formulas (T(A→B), T(¬A)): re-selected automatically whenever a
-     *   new accessible world makes Def. 5.3 fail again — same behaviour as before.
-     * - Existential formulas (F(A→B), F(¬A)): pre-checked and discarded as soon
-     *   as Def. 5.3 is satisfied — same behaviour as before.
-     * - T∧, F∨, T∨, F∧: also pre-checked. Because Def. 5.3 now recurses through
-     *   subformulas instead of requiring their literal physical presence, many of
-     *   these are satisfied "for free" from atomic witnesses, and their rules
-     *   never need to fire — this is the source of the reduced branching.
+     *   new accessible world makes Def. 5.3 fail again.
+     * - Existential formulas (F(A→B), F(¬A)): discarded as soon as Def. 5.3 holds.
+     * - T∧, F∨, T∨, F∧: likewise. Because Def. 5.3 recurses through subformulas
+     *   instead of requiring their literal physical presence, many of these are
+     *   satisfied "for free" from atomic witnesses and their rules never need to
+     *   fire — this is the source of the reduced branching.
      *
-     * Whenever a formula is discarded because Def. 5.3 already holds, we mark
-     * it ANALYSED so that {@link IPLPBRuleApplicator#hasUnanalysedFormulas} can
-     * recognise that no operational work remains.
+     * Re-selection of a formula on which no rule could fire is prevented by
+     * {@code failedFormulas} (cleared whenever any rule fires), not by any
+     * persistent per-node status.
      *
      * @param failedFormulas formulas that failed to apply any rule this round
      *                       (cleared whenever any rule fires, see processOpenBranch)
@@ -489,13 +511,11 @@ public class IPLCanonicalStrategyImplementation {
             boolean isTrue = "T".equals(sf.getSign().toString());
 
             if (isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo)) {
-                // Def. 5.3 already satisfied — formula is "completely analyzed".
-                // Mark ANALYSED so PB last-resort can recognise no work remains.
-                if (sfNode.getState() == SignedFormulaNodeState.NOT_ANALYSED) {
-                    sfNode.setState(SignedFormulaNodeState.ANALYSED);
-                    if (IPLTracer.isEnabled())
-                        tracer.logInfo("Def.5.3 already satisfied, marking ANALYSED: " + sf);
-                }
+                // Def. 5.3 already satisfied — not a candidate for this scan. Nothing is
+                // recorded on the node: the predicate is re-evaluated from the branch on
+                // every scan, so it can correctly fail again once a new constant appears.
+                if (IPLTracer.isEnabled())
+                    tracer.logInfo("Def.5.3 already satisfied, skipping: " + sf);
                 continue;
             }
 
@@ -544,9 +564,10 @@ public class IPLCanonicalStrategyImplementation {
     /**
      * Lines 7-20: Try to apply a rule to φ. Returns true if any rule fired.
      *
-     * All formulas are marked ANALYSED when no rule can fire. Universal formulas
-     * (T(A→B), T(¬A)) are re-selected later by selectUnanalyzedFormula whenever
-     * Definition 5.3 is not yet satisfied — no permanent NOT_ANALYSED needed.
+     * When no rule fires, the caller records φ in {@code failedFormulas} for the
+     * current round; nothing is written to the node. Universal formulas
+     * (T(A→B), T(¬A)) are therefore re-selected by selectUnanalyzedFormula as soon
+     * as a new constant makes Definition 5.3 fail for them again.
      */
     private boolean processFormula(IPLProofTree b, SignedFormula phi, SignedFormulaBuilder sfb) {
         if (IPLTracer.isEnabled()) tracer.logInfo("Trying 1-premise rules for: " + phi);
@@ -561,22 +582,8 @@ public class IPLCanonicalStrategyImplementation {
             return true;
         }
 
-        // Mark ANALYSED unconditionally. Universal formulas (T(A→B), T(¬A)) will be
-        // re-selected by selectUnanalyzedFormula whenever Def. 5.3 is unsatisfied for
-        // new accessible worlds — no need to keep them NOT_ANALYSED permanently.
-        if (IPLTracer.isEnabled()) tracer.logInfo("No rule for " + phi + " \u2014 marking ANALYSED");
-        markAsAnalyzed(b, phi);
+        if (IPLTracer.isEnabled()) tracer.logInfo("No rule for " + phi);
         return false;
-    }
-    
-    /**
-     * Marks a formula as analyzed in the branch.
-     */
-    private void markAsAnalyzed(IPLProofTree b, SignedFormula sf) {
-        SignedFormulaNode node = b.getNode(sf);
-        if (node != null) {
-            node.setState(SignedFormulaNodeState.ANALYSED);
-        }
     }
 
 }
