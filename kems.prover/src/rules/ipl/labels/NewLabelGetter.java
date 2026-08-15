@@ -1,58 +1,27 @@
 package rules.ipl.labels;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
-import logic.labelledFormulas.ContextFormulaLabel;
 import logic.labelledFormulas.FormulaLabel;
 import logic.signedFormulas.SignedFormulaList;
 
+/**
+ * Mints a fresh constant strictly above the main premise's label, which is what the two
+ * constant-introducing rules of Table 2 (F-&gt; and F~) require: {@code ci \u2AAF cj, cj new}.
+ *
+ * <p>Minting only ever upward, and always above exactly ONE existing label, is what keeps
+ * the constant ordering a tree rooted at c0. That in turn is what makes the set of common
+ * upper bounds of two labels either empty or possessed of a unique minimum, which is the
+ * precondition {@link MinimalGreaterLabelGetter} relies on to pick {@code ck} without an
+ * arbitrary choice. Two earlier variants of this getter could break that invariant -- one
+ * minting above a whole collection of labels (joining from below), the other above the
+ * auxiliary premise -- and neither was ever used; they were removed so the invariant holds
+ * by construction rather than by accident. The same reason removed
+ * {@code LabelCondition.getAuxiliaryLabel}, which minted below an existing label.
+ */
 public class NewLabelGetter extends LabelGetter {
 
-	public static final String MAIN = "MAIN";
-	public static final String AUX = "AUX";
-	public static final String BOTH = "BOTH";
-
-
-	private String getterType;
-	private FormulaLabel computedLabel = null;
-	
-	// Constructor
-	public NewLabelGetter(String getterType) {
-		this.getterType = getterType;
-	}
-
-	public NewLabelGetter() { 
-		this.getterType = "MAIN";
-	}
-
-		@Override
+	@Override
 	public FormulaLabel getLabel(SignedFormulaList lfl) {
-		//if (this.computedLabel != null)
-		//    return this.computedLabel;
-	
-		if ("MAIN".equals(this.getterType)) {
-			this.computedLabel = lfl.get(0).getLabel().getGreaterFormulaLabel();
-			return this.computedLabel;
-		} else if ("AUX".equals(this.getterType)) {
-			return lfl.get(1).getLabel().getGreaterFormulaLabel();
-		} else if ("BOTH".equals(this.getterType)) {
-			// map labelled formula list to a collection of formula labels
-			List<FormulaLabel> labels = lfl.getList().stream().map(lf -> lf.getLabel()).collect(Collectors.toList());
-			
-			if (labels.get(0) instanceof ContextFormulaLabel) {
-				// we should do something about this cast
-				return ((ContextFormulaLabel)lfl.get(0).getLabel()).getContext().getNewFormulaLabelGreaterThanCollection(labels);
-			} else {
-				// get max index in labels list
-				int maxIndex = labels.stream().mapToInt(l -> l.getIndex()).max().getAsInt();
-				return new FormulaLabel(FormulaLabel.LabelType.CONSTANT, maxIndex + 1);
-
-			}
-		} else {
-			return null;
-		}
-
+		return lfl.get(0).getLabel().getGreaterFormulaLabel();
 	}
 
 }

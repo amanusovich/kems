@@ -108,28 +108,33 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
             // hasApplied = true;
             Rule r = it.next();
 
-            // TERMINATION PROVISO for rule F->
-            // Do NOT apply (F->) if there is T A : ch with ch <= ci
-            if (r == IPLRules.F_A_IMPLIES_B_TA_FB && shouldBlockFImpliesRule(proofTree, sf)) {
+            // TERMINATION PROVISO. Applies to both constant-introducing rules: F-> and
+            // F~. They are the only two rules that mint constants, and the proviso is
+            // what bounds how many they mint (Lemma 5.8).
+            if ((r == IPLRules.F_A_IMPLIES_B_TA_FB || r == IPLRules.F_NOT)
+                    && shouldBlockFImpliesRule(proofTree, sf)) {
                 continue; // Skip this rule (shouldBlockFImpliesRule already logs the reason)
             }
 
 
-            // For T-not, generate conclusions for ALL available greater labels
-            boolean isTNot = isTNotFormula(sf);
+            // Does this rule's side condition leave the conclusion's label free to range?
+            // Ask the rule (OnePremiseOneConclusionRule.hasRangingConclusionLabel) rather
+            // than inspecting the formula, so a new rule of the same shape cannot silently
+            // take the wrong path. Only T~ answers true in Table 2.
+            boolean isTNot = (r instanceof rules.ipl.OnePremiseOneConclusionRule)
+                    && ((rules.ipl.OnePremiseOneConclusionRule) r).hasRangingConclusionLabel();
 
             // For regular rules (not T-not), check whether we already tried applying this rule to this formula.
             // proofTree is always an IPLProofTree: this applicator is only ever instantiated
             // by IPLSimpleStrategy, whose createPTInstance() always constructs IPLProofTree nodes.
-            if (!isTNot) {
+            // Every rule (including F_NOT) tracks by formula + label: per the paper, "each
+            // rule can be applied at most once for each particular choice of ls-formulas as
+            // premises", and an ls-formula includes its label, so F ~p : c1 and F ~p : c5
+            // are different instances. T~ is excluded here because its instances are keyed
+            // by the conclusion's label instead, below.
+            String baseRuleInstance = isTNot ? null : r.toString() + ":" + sf.toString();
+            if (baseRuleInstance != null) {
                 IPLProofTree iplTree = (IPLProofTree) proofTree;
-
-                // Every rule (including F_NOT) must track by formula + label:
-                // per the paper, "each rule can be applied at most once for each particular
-                // choice of ls-formulas as premises". An ls-formula includes its label, so
-                // F -p : c1 and F -p : c5 are different instances
-                String baseRuleInstance = r.toString() + ":" + sf.toString();
-
                 if (iplTree.wasRuleInstanceApplied(baseRuleInstance)) {
                     if (IPLTracer.isEnabled()) {
                         tracer.logRuleBlocked(r.toString(), sf.toString(),
@@ -137,7 +142,6 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
                     }
                     continue;
                 }
-                iplTree.registerRuleInstance(baseRuleInstance);
             }
 
             SignedFormulaList sfl;
@@ -214,6 +218,14 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
 
                 // Only mark as applied if we actually added new formulas
                 if (actuallyAddedFormula) {
+                    // Record the instance now that the rule is known to have fired
+                    // (Algorithm 1, line 13, which follows line 12's expansion of b).
+                    // Registering earlier would burn an instance that produced nothing,
+                    // the same defect that made tryPBAtAlternativeLabels block instances
+                    // it had never actually applied.
+                    if (baseRuleInstance != null) {
+                        ((IPLProofTree) proofTree).registerRuleInstance(baseRuleInstance);
+                    }
                     hasApplied = true;
                 }
             }
@@ -269,10 +281,29 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
     }
 
     /**
-     * Checks the termination proviso for rule F->.
+     * Checks the termination proviso for the two constant-introducing rules, F-> and F~.
      *
-     * Condition: do NOT apply (F->) to F A->B : ci if the branch already has
-     * a formula T A : ch for some constant ch such that ch <= ci.
+     * Condition: do NOT apply the rule to F A->B : ci (resp. F ~A : ci) if the branch
+     * already has a formula T A : ch for some constant ch such that ch <= ci.
+     *
+     * <p>The paper states the proviso for F->1 only, and Appendix A's note on the
+     * variable-free system of Table 2 likewise names only F->. That is not an omission
+     * in the theory: Section 3 defines ~A as A -> \u22A5 and says the rules for ~ "are
+     * included only to improve the system's efficiency", each being "a particular
+     * instance of a more general rule of ->", with F~1 an instance of F->1. So F~
+     * inherits the proviso by being F-> with B = \u22A5, and there is nothing extra to
+     * state. Definition 5.3 agrees: its clause for F ~A : ci is the clause for
+     * F A->B : ci with the F B conjunct dropped, which is what B = \u22A5 leaves.
+     *
+     * <p>Here that inheritance has to be restored by hand, because F~ is reified as its
+     * own {@link IPLRules#F_NOT} rather than expanded into F->. Without it the procedure
+     * does not terminate: F ~A : ci mints a constant unconditionally, a universal T ~B
+     * formula then fires at the new constant and derives another F ~A at it, and so on.
+     * Measured on SYJ106+1 (three formulas, five atoms): constants grew past 497 without
+     * the branch ever being finished; with the proviso the problem is decided in 133 ms.
+     *
+     * <p>No analogue of F->3 is needed for F~. F->3 concludes F B : cj, which for
+     * B = \u22A5 is vacuous, so for ~ the proviso alone is the whole measure.
      *
      * @param proofTree the current proof tree
      * @param sf the formula F A->B : ci to check
@@ -289,8 +320,10 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         }
 
         CompositeFormula comp = (CompositeFormula) sf.getFormula();
-        if (!comp.getConnective().equals(IPLConnectives.IMPLIES)) {
-            return false; // Not ->, do not block
+        boolean isImplies = comp.getConnective().equals(IPLConnectives.IMPLIES);
+        boolean isNot = comp.getConnective().equals(IPLConnectives.NOT);
+        if (!isImplies && !isNot) {
+            return false; // neither -> nor ~, do not block
         }
 
         // It is F A->B, check the proviso
@@ -301,7 +334,7 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
         LabelledFormula lfMain = (LabelledFormula) sf;
         FormulaLabel ciLabel = lfMain.getLabel();
 
-        // Get A (the left subformula of A->B)
+        // A is the left subformula of A->B, and the only subformula of ~A
         Formula aFormula = comp.getImmediateSubformulas().get(0);
 
         Context context = getContextFromLabel(ciLabel);
@@ -342,8 +375,8 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
 
                 if (chEqualsCI || chLowerOrEqualCI) {
                     if (IPLTracer.isEnabled()) {
-                        tracer.logRuleBlocked("F_IMPLIES", sf.toString(),
-                                "Proviso (F\u2192): found T " + aFormula + " : " + chLabel + " where "
+                        tracer.logRuleBlocked(isNot ? "F_NOT" : "F_IMPLIES", sf.toString(),
+                                "Proviso: found T " + aFormula + " : " + chLabel + " where "
                                         + chLabel + " \u2264 " + ciLabel);
                     }
                     return true; // BLOCK the application of F->
@@ -366,32 +399,6 @@ public class IPLOnePremiseRuleApplicator implements IRuleApplicator {
             return ((ContextFormulaLabel) label).getContext();
         }
         return null;
-    }
-
-    /**
-     * Returns true if sf is a T-not-A formula (universal/gamma-rule: T-A:ci is
-     * completely analyzed iff for all cj>=ci, F A:cj is completely analyzed --
-     * Definition 5.3). These formulas generate at most one
-     * not-yet-derived conclusion per invocation (see
-     * {@link #generateNextTNotConclusion}); re-selection is handled by
-     * selectUnanalyzedFormula via the Definition 5.3 check.
-     */
-    private boolean isTNotFormula(SignedFormula sf) {
-        if (sf == null) return false;
-
-        // Check that it is T-signed
-        if (!sf.getSign().equals(IPLSigns.TRUE)) {
-            return false;
-        }
-
-        // Check that the formula is a negation (-A)
-        Formula formula = sf.getFormula();
-        if (formula instanceof CompositeFormula) {
-            CompositeFormula comp = (CompositeFormula) formula;
-            return comp.getConnective().equals(IPLConnectives.NOT);
-        }
-
-        return false;
     }
 
     /**

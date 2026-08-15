@@ -203,7 +203,9 @@ public class IPLRules {
 				ActionType.ADD_NODE,
 				UnaryConnectiveGetter.FALSE,
 				// cj such that ci ⪯ cj (not necessarily new)
-				new MinimalGreaterLabelGetter()));
+				new MinimalGreaterLabelGetter()),
+		// cj ranges over every accessible label above ci: one rule instance per cj
+		true);
 
 
     /**
@@ -223,7 +225,7 @@ public class IPLRules {
 				ActionType.ADD_NODE,
 				UnaryConnectiveGetter.TRUE,
 				// new cj such that ci ⪯ cj
-				new NewLabelGetter("MAIN")));
+				new NewLabelGetter()));
 
 	/**
 	Rule (T∨₁) - T-Disjunction 1

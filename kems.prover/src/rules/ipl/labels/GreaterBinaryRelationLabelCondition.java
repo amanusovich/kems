@@ -27,9 +27,4 @@ public class GreaterBinaryRelationLabelCondition implements LabelCondition {
         return !candidateLabels.isEmpty();
     }
 
-	@Override
-	public FormulaLabel getAuxiliaryLabel(LabelledFormula main) {
-		return main.getLabel().getGreaterFormulaLabel();
-	}
-
 }

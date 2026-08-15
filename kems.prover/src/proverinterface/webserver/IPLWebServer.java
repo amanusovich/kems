@@ -155,6 +155,8 @@ public final class IPLWebServer {
             String body = readAll(ex.getRequestBody());
             String formula = extractJsonString(body, "formula");
             String name    = extractJsonString(body, "name");
+            String pbParam = extractJsonString(body, "pb");
+            boolean immediatePB = "IMMEDIATE".equalsIgnoreCase(pbParam);
             if (formula == null || formula.trim().isEmpty()) {
                 respondJsonError(ex, 400, "Missing 'formula' field");
                 return;
@@ -162,7 +164,8 @@ public final class IPLWebServer {
 
             try {
                 String html = runProveWithTimeout(formula.trim(),
-                                                  (name != null && !name.isEmpty()) ? name : "Custom");
+                                                  (name != null && !name.isEmpty()) ? name : "Custom",
+                                                  immediatePB);
                 respondHtmlCompressed(ex, html);
             } catch (TimeoutException te) {
                 respondJsonError(ex, 504,
@@ -178,10 +181,11 @@ public final class IPLWebServer {
             }
         }
 
-        private static String runProveWithTimeout(String formula, String name) throws Exception {
+        private static String runProveWithTimeout(String formula, String name, boolean immediatePB)
+                throws Exception {
             Future<String> future = PROVER_EXECUTOR.submit(() -> {
                 synchronized (PROVER_LOCK) {
-                    return runProveBlocking(formula, name);
+                    return runProveBlocking(formula, name, immediatePB);
                 }
             });
             try {
@@ -192,7 +196,7 @@ public final class IPLWebServer {
             }
         }
 
-        private static String runProveBlocking(String formula, String name) {
+        private static String runProveBlocking(String formula, String name, boolean immediatePB) {
             SignedFormulaCreator creator = new SignedFormulaCreator("ipl");
             creator.setTwoPhases(false);
             IPLTracer.setEnabled(true);
@@ -205,6 +209,10 @@ public final class IPLWebServer {
                     RuleStructureFactory.createRulesStructure(RuleStructureFactory.IPL));
             IPLSimpleStrategy strategy = new IPLSimpleStrategy(method);
             strategy.setComparator(new InsertionOrderSignedFormulaComparator());
+            if (immediatePB) {
+                strategy.setPbPolicy(
+                        main.newstrategy.ipl.IPLCanonicalStrategyImplementation.PBPolicy.IMMEDIATE);
+            }
 
             Prover prover = new Prover();
             prover.setMethod(method);
@@ -383,6 +391,11 @@ public final class IPLWebServer {
         + "    </select>\n"
         + "    <label for=\"formula\" style=\"margin-top:16px\">Formula</label>\n"
         + "    <textarea id=\"formula\" placeholder=\"F -&gt;(-(-A) A) c0\" spellcheck=\"false\"></textarea>\n"
+        + "    <label for=\"pb\" style=\"margin-top:16px\">PB policy</label>\n"
+        + "    <select id=\"pb\">\n"
+        + "      <option value=\"DEFERRED\">Deferred \u2014 PB only once selection is exhausted (default)</option>\n"
+        + "      <option value=\"IMMEDIATE\">Immediate \u2014 PB as soon as a formula needs its minor premise</option>\n"
+        + "    </select>\n"
         + "    <div class=\"row\">\n"
         + "      <button id=\"solve\">Solve</button>\n"
         + "      <span class=\"status\" id=\"status\"></span>\n"
@@ -445,7 +458,7 @@ public final class IPLWebServer {
         + "        const resp = await fetch('/api/prove', {\n"
         + "          method: 'POST',\n"
         + "          headers: { 'Content-Type': 'application/json' },\n"
-        + "          body: JSON.stringify({ formula, name })\n"
+        + "          body: JSON.stringify({ formula, name, pb: document.getElementById('pb').value })\n"
         + "        });\n"
         + "        if (!resp.ok) {\n"
         + "          let msg = 'HTTP ' + resp.status;\n"

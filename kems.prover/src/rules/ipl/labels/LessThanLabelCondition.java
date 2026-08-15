@@ -1,6 +1,5 @@
 package rules.ipl.labels;
 
-import logic.labelledFormulas.FormulaLabel;
 import logic.labelledFormulas.LabelledFormula;
 import logic.signedFormulas.SignedFormulaList;
 
@@ -19,12 +18,6 @@ public class LessThanLabelCondition implements LabelCondition {
         // main.label <= aux.label (ci <= cj)
         boolean result = main.getLabel().lowerOrEqualThan(aux.getLabel());
         return result;
-    }
-
-    @Override
-    public FormulaLabel getAuxiliaryLabel(LabelledFormula main) {
-        // Return a label that is greater than or equal to main
-        return main.getLabel().getGreaterFormulaLabel();
     }
 
 }

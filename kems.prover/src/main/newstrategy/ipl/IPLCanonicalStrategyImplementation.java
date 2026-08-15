@@ -95,7 +95,54 @@ public class IPLCanonicalStrategyImplementation {
     private rules.structures.OnePremiseRuleList onePremiseRules;
     private rules.structures.IPLConnectiveRoleSignRuleList twoPremiseRules;
     
+    /**
+     * When PB is applied, relative to the selection loop.
+     *
+     * <p>Algorithm 1 places PB inside the body, at line 8: pick a phi that is not
+     * completely analyzed (line 6), pick an instance r with maj(r) = phi (line 7), and if r
+     * is a 2-rule whose minor premise is absent, branch right there to supply it.
+     * Footnote 8 states this placement is a free choice -- the canonical procedure "does
+     * not necessarily push PB applications down" -- and Theorem 5.9 shows termination does
+     * not depend on it, while warning that "further or less control on PB might
+     * dramatically affect proof-size and proof-search complexity".
+     *
+     * <p>Measured over the 274 propositional ILTP problems with a 10 s limit, both
+     * policies agree with the declared status on every problem they decide and never
+     * stall, so this is purely a proof-size trade-off:
+     *
+     * <pre>
+     *   DEFERRED   113 solved   14361 nodes   2368 branches
+     *   IMMEDIATE   98 solved   24268 nodes   4514 branches   (+69% / +91%)
+     * </pre>
+     *
+     * The two are not uniformly ordered. DEFERRED is what makes the whole SYJ205 family
+     * tractable -- every instance closes with exactly 2 branches and node count growing
+     * linearly, because analysing further supplies the missing minor premises on its own
+     * and the split never becomes necessary; under IMMEDIATE, SYJ205+1.002 already blows
+     * up to 703 branches and .003 onwards do not finish. Conversely IMMEDIATE decides four
+     * problems DEFERRED cannot, and not marginally: SYJ201+1.002 takes 187 s and 2560
+     * branches under DEFERRED but 3.9 s and 578 branches under IMMEDIATE.
+     *
+     * <p>DEFERRED is the default because it wins 19 problems to 4.
+     */
+    public enum PBPolicy {
+        /** PB only once selection is exhausted, i.e. no formula can advance without branching. */
+        DEFERRED,
+        /** PB on the first formula for which no rule fires, closer to line 8 read literally. */
+        IMMEDIATE
+    }
+
+    private PBPolicy pbPolicy = PBPolicy.DEFERRED;
+
     public IPLCanonicalStrategyImplementation() {
+    }
+
+    public IPLCanonicalStrategyImplementation(PBPolicy pbPolicy) {
+        this.pbPolicy = pbPolicy;
+    }
+
+    public PBPolicy getPbPolicy() {
+        return pbPolicy;
     }
     
     /**
@@ -239,6 +286,11 @@ public class IPLCanonicalStrategyImplementation {
                     enqueueOpenChildren(b, openBranches);
                     break;
                 }
+            } else if (pbPolicy == PBPolicy.IMMEDIATE && pbApplicator.applySingle(b, sfb, phi)) {
+                // Line 8 applied at the point the selected formula needs its minor premise,
+                // instead of waiting for the selection to be exhausted. See PBPolicy.
+                enqueueOpenChildren(b, openBranches);
+                break;
             } else {
                 failedFormulas.add(phi);
             }
@@ -295,6 +347,7 @@ public class IPLCanonicalStrategyImplementation {
         if (ctx == null) return true; // no constant labels yet — nothing to check
 
         Map<String, Boolean> memo = new HashMap<>();
+        Map<String, Boolean> trueCache = branch.getDef53TrueCache(ctx);
 
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = branch.getTopDownIterator();
         while (it.hasNext()) {
@@ -308,7 +361,7 @@ public class IPLCanonicalStrategyImplementation {
             if (!(lf.getLabel() instanceof ContextFormulaLabel)) continue;
 
             boolean isTrue = "T".equals(sf.getSign().toString());
-            if (!isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo)) {
+            if (!isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo, trueCache)) {
                 return false;
             }
         }
@@ -349,11 +402,14 @@ public class IPLCanonicalStrategyImplementation {
      */
     private boolean isCompletelyAnalyzed(boolean isTrue, Formula formula, FormulaLabel label,
             Context ctx, List<SignedFormula> physicalB, Set<FormulaLabel> constantLabels,
-            Map<String, Boolean> memo) {
+            Map<String, Boolean> memo, Map<String, Boolean> trueCache) {
 
         String key = (isTrue ? "T|" : "F|") + formula + "|" + label;
         Boolean cached = memo.get(key);
         if (cached != null) return cached;
+        // Survives across scans of the same branch until a constant is minted; see
+        // IPLProofTree.getDef53TrueCache for why that is sound.
+        if (trueCache.containsKey(key)) return true;
 
         boolean result;
         if (formula instanceof CompositeFormula && !((CompositeFormula) formula).getImmediateSubformulas().isEmpty()) {
@@ -365,27 +421,27 @@ public class IPLCanonicalStrategyImplementation {
 
             if (isTrue && conn.equals(IPLConnectives.AND)) {
                 result = B != null
-                        && isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo)
-                        && isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo);
+                        && isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo, trueCache)
+                        && isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo, trueCache);
             } else if (!isTrue && conn.equals(IPLConnectives.AND)) {
                 result = B != null
-                        && (isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo)
-                            || isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo));
+                        && (isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo, trueCache)
+                            || isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo, trueCache));
             } else if (isTrue && conn.equals(IPLConnectives.OR)) {
                 result = B != null
-                        && (isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo)
-                            || isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo));
+                        && (isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo, trueCache)
+                            || isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo, trueCache));
             } else if (!isTrue && conn.equals(IPLConnectives.OR)) {
                 result = B != null
-                        && isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo)
-                        && isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo);
+                        && isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo, trueCache)
+                        && isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo, trueCache);
             } else if (isTrue && conn.equals(IPLConnectives.IMPLIES)) {
                 // ∀ cj ∈ Cb, label ⪯ cj : F A:cj c.a. or T B:cj c.a.
                 result = true;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo)
-                            && !isCompletelyAnalyzed(true, B, cj, ctx, physicalB, constantLabels, memo)) {
+                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo, trueCache)
+                            && !isCompletelyAnalyzed(true, B, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
                         result = false;
                         break;
                     }
@@ -395,8 +451,8 @@ public class IPLCanonicalStrategyImplementation {
                 result = false;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo)
-                            && isCompletelyAnalyzed(false, B, cj, ctx, physicalB, constantLabels, memo)) {
+                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo, trueCache)
+                            && isCompletelyAnalyzed(false, B, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
                         result = true;
                         break;
                     }
@@ -406,7 +462,7 @@ public class IPLCanonicalStrategyImplementation {
                 result = true;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo)) {
+                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
                         result = false;
                         break;
                     }
@@ -416,7 +472,7 @@ public class IPLCanonicalStrategyImplementation {
                 result = false;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo)) {
+                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
                         result = true;
                         break;
                     }
@@ -435,6 +491,7 @@ public class IPLCanonicalStrategyImplementation {
         }
 
         memo.put(key, result);
+        if (result) trueCache.put(key, Boolean.TRUE);
         return result;
     }
 
@@ -517,6 +574,7 @@ public class IPLCanonicalStrategyImplementation {
         Set<FormulaLabel> constantLabels = null;
         Context ctx = null;
         Map<String, Boolean> memo = null;
+        Map<String, Boolean> trueCache = null;
 
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = b.getTopDownIterator();
         while (it.hasNext()) {
@@ -537,12 +595,13 @@ public class IPLCanonicalStrategyImplementation {
                 constantLabels = collectConstantLabels(physicalB);
                 ctx = firstContext(constantLabels);
                 memo = new HashMap<>();
+                trueCache = b.getDef53TrueCache(ctx);
             }
             if (ctx == null) continue; // no constant labels yet — nothing to check
 
             boolean isTrue = "T".equals(sf.getSign().toString());
 
-            if (isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo)) {
+            if (isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo, trueCache)) {
                 // Def. 5.3 already satisfied — not a candidate for this scan. Nothing is
                 // recorded on the node: the predicate is re-evaluated from the branch on
                 // every scan, so it can correctly fail again once a new constant appears.

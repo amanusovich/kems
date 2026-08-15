@@ -129,6 +129,44 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         }
     }
 
+    /**
+     * Cross-scan cache of the Definition 5.3 predicate for this branch, holding only the
+     * keys that evaluated to TRUE.
+     *
+     * <p>Sound because the predicate is monotone in the branch's formulas as long as Cb
+     * does not grow. Every existential clause (T p : cj, F p : ci, F A->B : ci, F ~A : ci)
+     * can only go from false to true as formulas are added, and the conjunctive and
+     * disjunctive clauses inherit that. The only clauses that can go from true to false
+     * are the two that quantify over Cb -- T A->B : ci and T ~A : ci -- and they can only
+     * do so when a NEW constant appears. The ordering between constants that already exist
+     * never changes either: addRelation is reached only from the getNewFormulaLabel*
+     * methods, which always relate a freshly minted label. So a TRUE stays TRUE until the
+     * next constant is minted, which is what {@link #def53Watermark} detects.
+     *
+     * <p>FALSE results are deliberately not cached: adding a formula can turn them true.
+     *
+     * <p>Per branch, not shared: a sibling branch has different formulas, so its TRUEs do
+     * not transfer. It is not inherited from the parent either, which is only a missed
+     * optimisation, never a source of wrong answers.
+     */
+    private final java.util.Map<String, Boolean> def53TrueCache = new java.util.HashMap<>();
+    private int def53Watermark = -1;
+
+    /**
+     * Returns this branch's Definition 5.3 TRUE-cache, cleared first if a constant has been
+     * minted since it was last used. The label count of the shared Context is a
+     * conservative witness: it only grows, and it grows exactly when some branch mints a
+     * constant, so this may clear more often than strictly needed but never less.
+     */
+    public java.util.Map<String, Boolean> getDef53TrueCache(Context ctx) {
+        int now = ctx.getLabels().size();
+        if (now != def53Watermark) {
+            def53TrueCache.clear();
+            def53Watermark = now;
+        }
+        return def53TrueCache;
+    }
+
     private void recordRinstancesSnapshot(SignedFormulaNode node) {
         // We snapshot the path-level count (ancestors + local) because the GUI
         // displays the full chain in rinstances; the count tells the viewer
