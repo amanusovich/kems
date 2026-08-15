@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import logic.formulas.Formula;
 import logic.signedFormulas.SignedFormula;
-import logic.signedFormulas.FormulaSign;
 import logic.labelledFormulas.LabelledFormula;
 import logic.labelledFormulas.FormulaLabel;
 import logic.labelledFormulas.ContextFormulaLabel;
@@ -92,6 +91,7 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         // LinkedHashSet preserves insertion order; useful for GUI / HTML inspection
         // where rinstances are displayed in the order they were registered.
         this.localRinstances = new java.util.LinkedHashSet<>();
+        registerLabelOf(aNode);
         recordRinstancesSnapshot(aNode);
     }
 
@@ -106,7 +106,27 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         this.sharedLabelBranchMap = (sharedLabelBranchMap != null) ? sharedLabelBranchMap : new HashMap<>();
         this.localRinstances = new java.util.LinkedHashSet<>();
         this.branchId = branchId;
+        registerLabelOf(aNode);
         recordRinstancesSnapshot(aNode);
+    }
+
+    /**
+     * Registers the label of a node that enters this branch through a constructor rather
+     * than through {@code addLast}: the root ls-formula, and the ls-formula PB puts at the
+     * head of each child branch. Without this, the first constant of the derivation stays
+     * unowned until some later {@code addLast} claims it — and if that happens in a PB
+     * child, the constant is recorded as belonging to that child, which makes it look
+     * inaccessible from its sibling and silently removes every ls-formula labelled with it
+     * from that sibling's PB candidates. Registration keeps the first owner, so a constant
+     * an ancestor already introduced is unaffected by being repeated here.
+     */
+    private void registerLabelOf(INode aNode) {
+        if (aNode instanceof SignedFormulaNode) {
+            Object content = ((SignedFormulaNode) aNode).getContent();
+            if (content instanceof LabelledFormula) {
+                registerLabel(((LabelledFormula) content).getLabel());
+            }
+        }
     }
 
     private void recordRinstancesSnapshot(SignedFormulaNode node) {
@@ -370,85 +390,19 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
         recordRinstancesSnapshot(sfNode);
     }
 
+    /**
+     * Only maintains the sign multimap. Closure is not tested here: it is the static
+     * predicate of Definitions 3.1 (b contains T A : ci and F A : cj with ci \u2AAF cj),
+     * and {@link #checkPhysicalBForContradiction()} evaluates it on every iteration of
+     * the inner loop, which is what Algorithm 1 line 5 asks for. Testing it again on
+     * each insertion would only detect, one iteration earlier, closures that scan
+     * already finds -- and could not detect the ones that matter, since \u2AAF keeps
+     * growing after a pair is inserted and an insertion-time test never revisits it.
+     */
     @Override
     protected void updateMultimap(SignedFormulaNode aNode) {
-        // For IPL, do NOT run the classical detection, only IPL-specific rules
         SignedFormula sf = (SignedFormula) aNode.getContent();
         getFsmm().put(sf.getFormula(), sf.getSign());
-
-        // Check IPL closure rules
-        if (detectIPLContradiction(aNode)) {
-            if (IPLTracer.isEnabled()) {
-                tracer.logInfo("CONTRADICTION DETECTED for " + sf);
-            }
-            setClosingReason(sf);
-            setLocallyClosed(true);
-        }
-    }
-
-    /**
-     * Detects contradictions according to KEIPL's closure rule (Table 2):
-     *   T A:ci, F A:cj, ci <= cj -> x
-     *
-     * The new formula is already in b (inserted by super.addLast before
-     * updateMultimap runs). We look for the opposite-sign formula directly in
-     * the physical branch b (branch + ancestors), applying the <= relation
-     * over the constant labels.
-     *
-     * The closure rule is stated directly over the physical branch b (it
-     * requires no extended set), so iterating b directly is correct and
-     * sufficient -- and O(n) instead of the O(n^2) it would take to compute
-     * the full closure.
-     */
-    private boolean detectIPLContradiction(SignedFormulaNode aNode) {
-        SignedFormula newSf = (SignedFormula) aNode.getContent();
-        if (!(newSf instanceof LabelledFormula)) return false;
-
-        LabelledFormula newLf = (LabelledFormula) newSf;
-        FormulaLabel newLabel = newLf.getLabel();
-        Formula newFormula = newLf.getFormula();
-        FormulaSign newSign = newSf.getSign();
-
-        if (newLabel == null || !isLabelAccessible(newLabel)) return false;
-
-        Context context = getContextFromLabel(newLabel);
-        if (context == null) return false;
-
-        // T A:ci (new) -> look for F A:cj in b with ci <= cj
-        // F A:cj (new) -> look for T A:ci in b with ci <= cj
-        FormulaSign oppositeSign = newSign.equals(IPLSigns.TRUE) ? IPLSigns.FALSE : IPLSigns.TRUE;
-
-        IPLProofTree current = this;
-        while (current != null) {
-            IProofTreeVeryBasicIterator it = current.getTopDownIterator();
-            while (it.hasNext()) {
-                INode node = it.next();
-                if (!(node instanceof SignedFormulaNode)) continue;
-                SignedFormula sf = (SignedFormula) ((SignedFormulaNode) node).getContent();
-                if (!sf.getSign().equals(oppositeSign)) continue;
-                if (!sf.getFormula().equals(newFormula)) continue;
-                if (!(sf instanceof LabelledFormula)) continue;
-
-                FormulaLabel label = ((LabelledFormula) sf).getLabel();
-                if (label == null || !isLabelAccessible(label)) continue;
-
-                // ci = label of the T formula, cj = label of the F formula
-                FormulaLabel ciLabel = newSign.equals(IPLSigns.TRUE) ? newLabel : label;
-                FormulaLabel cjLabel = newSign.equals(IPLSigns.TRUE) ? label : newLabel;
-
-                if (isLowerOrEqual(context, ciLabel, cjLabel)) {
-                    if (IPLTracer.isEnabled()) {
-                        tracer.logClosure(newFormula + " " + ciLabel,
-                                newFormula + " " + cjLabel,
-                                ciLabel + " \u2AAF " + cjLabel);
-                    }
-                    return true;
-                }
-            }
-            IProofTree parent = current.getParent();
-            current = (parent instanceof IPLProofTree) ? (IPLProofTree) parent : null;
-        }
-        return false;
     }
 
     /**
@@ -505,9 +459,11 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
 
                 if (isLowerOrEqual(context, label1, label2)) {
                     if (IPLTracer.isEnabled()) {
-                        tracer.logInfo("Contradiction: T " + sf1.getFormula()
-                                + " " + label1 + " vs F " + sf2.getFormula() + " " + label2);
+                        tracer.logClosure(sf1.getFormula() + " " + label1,
+                                sf2.getFormula() + " " + label2,
+                                label1 + " \u2AAF " + label2);
                     }
+                    setClosingReason(sf1);
                     setLocallyClosed(true);
                     return true;
                 }
@@ -528,7 +484,7 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
 
     /**
      * Collects all physical formulas of b (current branch + ancestors), deduplicated.
-     * Used by detectIPLContradiction and checkPhysicalBForContradiction to iterate b directly.
+     * Used by checkPhysicalBForContradiction to iterate b directly.
      */
     private List<SignedFormula> collectPhysicalFormulas() {
         List<SignedFormula> result = new ArrayList<>();

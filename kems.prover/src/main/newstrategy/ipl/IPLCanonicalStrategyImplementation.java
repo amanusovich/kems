@@ -151,13 +151,25 @@ public class IPLCanonicalStrategyImplementation {
             if (b.isClosed()) {
                 if (!T.isClosed()) strategy.finishBranch(b);
             } else if (b.getLeft() == null && b.getRight() == null) {
-                // Leaf branch not closed — it is a completed open branch (potential countermodel)
-                if (IPLTracer.isEnabled()) {
-                    if (!isBranchCompletePerDef53(b)) tracer.logInfo("WARNING: branch exited loop but Definition 5.3 not fully satisfied");
+                // Leaf branch, not closed: it can only be reported as a completed open branch —
+                // the certificate a countermodel is read off (Lemma 5.14) — if Definition 5.3
+                // really holds for it. The check is unconditional: reporting a branch as
+                // completed when it is not would present a countermodel that does not exist.
+                if (!isBranchCompletePerDef53(b)) {
+                    throw new IllegalStateException(
+                        "IPL: branch " + b.getBranchId() + " has no applicable rule instance yet "
+                      + "Definition 5.3 does not hold for it, so it is neither closed nor completed. "
+                      + "The procedure has no move left and cannot return a verdict for this input.");
                 }
                 b.setCompleted(true);
                 T.setOpenCompletedBranch(b);
                 if (IPLTracer.isEnabled()) tracer.logBranchCompleted(b.getBranchId(), false);
+
+                // Algorithm 1, line 2: the outer loop runs while T is neither closed nor
+                // completed, and a derivation is completed as soon as it HAS a completed
+                // branch (Definitions 5.5). One completed branch already carries the
+                // countermodel (Lemma 5.14), so the remaining open branches decide nothing.
+                break;
             }
             // else: b has children that were already enqueued inside processOpenBranch
         }
@@ -187,9 +199,29 @@ public class IPLCanonicalStrategyImplementation {
             SignedFormula phi = selectUnanalyzedFormula(b, failedFormulas);
 
             if (phi == null) {
-                // All formulas exhausted — one final PB attempt, then stop
+                // Selection is exhausted. PB is the last resort (Algorithm 1, line 8).
                 if (IPLTracer.isEnabled()) tracer.logInfo("No formula to analyze \u2014 trying PB as last resort");
-                pbApplicator.apply(b, sfb);
+                boolean pbFired = pbApplicator.apply(b, sfb);
+
+                if (!pbFired) {
+                    // The fast applicability test found no target. That test is stronger than
+                    // Algorithm 1 line 8 (see IPLPBRuleApplicator.PBMode), so "no target" under
+                    // it does not mean the branch is completed. Before the branch can be
+                    // declared completed, ask line 8's own question.
+                    if (IPLTracer.isEnabled())
+                        tracer.logInfo("PB found no target under the fast test \u2014 escalating to Algorithm 1 line 8");
+                    pbFired = pbApplicator.applyExact(b, sfb);
+                    if (pbFired && IPLTracer.isEnabled())
+                        tracer.logInfo("PB applied only under line 8's test: the fast test would have "
+                                + "left this branch stalled");
+                }
+
+                if (!pbFired) {
+                    // No rule instance applies at all: the branch is completed in the sense of
+                    // Definition 5.3. Verified in execute() before it is reported as such.
+                    if (IPLTracer.isEnabled()) tracer.logInfo("PB found no target under either test");
+                }
+
                 enqueueOpenChildren(b, openBranches);
                 break;
             }
@@ -210,8 +242,8 @@ public class IPLCanonicalStrategyImplementation {
             } else {
                 failedFormulas.add(phi);
             }
-            // Closure via detectIPLContradiction is automatic; the checkBranchDone
-            // call at the top of the next iteration handles everything else.
+            // Closure and completeness are both re-evaluated by the checkBranchDone
+            // call at the top of the next iteration.
         }
     }
 

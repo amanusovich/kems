@@ -75,8 +75,28 @@ public class IPLPBRuleApplicator implements IProofTransformation {
         PBCandidateList singleCandidateList = new PBCandidateList();
         singleCandidateList.add(candidate);
 
-        return tryToApplyPBAsLastResort(current, sfb, singleCandidateList);
+        return tryToApplyPBAsLastResort(current, sfb, singleCandidateList, PBMode.FAST);
     }
+
+    /**
+     * How PB decides that the minor premise it needs is missing.
+     *
+     * <p>Algorithm 1, line 8, asks whether {@code min(r) ∉ b}, where {@code min(r)} is an
+     * ls-formula <em>including its label</em> (§3.2: labels and constraints do matter for
+     * telling two rule instances apart). {@link #EXACT} asks exactly that question.
+     * {@link #FAST} asks the stronger question "does this subformula occur at <em>any</em>
+     * label?", which suppresses PB applications the algorithm would make.
+     *
+     * <p>FAST is what keeps proof search tractable: it decides once and for all that a
+     * subformula already present somewhere is never a PB target again on that path,
+     * instead of locating, per formula, the state where it turns true. That is worth
+     * roughly a factor of the number of constants in the derivation. Its cost is that it
+     * can leave a branch with no applicable rule while Definition 5.3 still fails on it —
+     * which would report a theorem as a non-theorem. EXACT is therefore consulted before
+     * any branch is allowed to be declared completed
+     * ({@link main.newstrategy.ipl.IPLCanonicalStrategyImplementation#processOpenBranch}).
+     */
+    public enum PBMode { FAST, EXACT }
 
     /**
      * The sole caller, {@code IPLCanonicalStrategyImplementation.processOpenBranch()},
@@ -88,8 +108,23 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      */
     @Override
     public boolean apply(ClassicalProofTree current, SignedFormulaBuilder sfb) {
+        return apply(current, sfb, PBMode.FAST);
+    }
+
+    /**
+     * Retries PB under Algorithm 1's own applicability test (see {@link PBMode}). Called
+     * only when {@link #apply(ClassicalProofTree, SignedFormulaBuilder)} found no target,
+     * i.e. at the exact point where the branch would otherwise be declared completed.
+     * Rule instances are still filtered through {@code rinstances}, so this cannot
+     * re-apply an instance the path already used.
+     */
+    public boolean applyExact(ClassicalProofTree current, SignedFormulaBuilder sfb) {
+        return apply(current, sfb, PBMode.EXACT);
+    }
+
+    private boolean apply(ClassicalProofTree current, SignedFormulaBuilder sfb, PBMode mode) {
         if (IPLTracer.isEnabled()) {
-            tracer.logInfo("PB: starting as last resort");
+            tracer.logInfo("PB: starting as last resort (mode=" + mode + ")");
         }
 
         // Instead of relying only on getPBCandidates() (which may be empty if formulas were
@@ -103,7 +138,7 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             }
             // Do NOT sort: keep the FIFO order (insertion order) from the top-down iterator
             // allCompositeCandidates.sort(strategy.getComparator());
-            return tryToApplyPBAsLastResort(current, sfb, allCompositeCandidates);
+            return tryToApplyPBAsLastResort(current, sfb, allCompositeCandidates, mode);
         }
 
         if (IPLTracer.isEnabled()) {
@@ -152,6 +187,24 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             tracer.logInfo("PB: no instance found: " + target.getSign() + " " + target.getFormula());
         }
         return false;
+    }
+
+    /**
+     * Whether the minor premise {@code requiredAux} counts as already available, so that
+     * PB need not introduce it. See {@link PBMode}: FAST asks whether the subformula occurs
+     * at any label at all; EXACT asks Algorithm 1 line 8's question, i.e. whether the
+     * ls-formula occurs at the label PB would actually create it at — the major premise's
+     * own label, which is what {@code applyPBAndTwoPremiseRule} uses as the shared label.
+     */
+    private boolean minorPremiseIsAvailable(ClassicalProofTree current, SignedFormula requiredAux,
+            SignedFormula majorPremise, PBMode mode) {
+        if (requiredAux == null) return true;
+        if (mode == PBMode.FAST) return formulaExistsInTree(current, requiredAux);
+
+        FormulaLabel at = majorPremise.getLabel();
+        if (at == null) return formulaExistsInTree(current, requiredAux);
+        return ((IPLProofTree) current).findFormulaWithSignAndLabel(
+                requiredAux.getFormula(), requiredAux.getSign(), at) != null;
     }
 
     /**
@@ -221,7 +274,7 @@ public class IPLPBRuleApplicator implements IProofTransformation {
      * Attempts to apply PB as a last resort for two-premise rules OR plain PB
      */
     protected boolean tryToApplyPBAsLastResort(ClassicalProofTree current, SignedFormulaBuilder sfb,
-            PBCandidateList candidates) {
+            PBCandidateList candidates, PBMode mode) {
 
         // Get all IPL two-premise rules (not just PB_RULE_LIST)
         var twoPremiseRules = strategy.getMethod().getRules().get(IPLRuleStructures.TWO_PREMISE_RULE_LIST);
@@ -257,7 +310,7 @@ public class IPLPBRuleApplicator implements IProofTransformation {
 
                 for (Rule rule : applicableRules) {
                     SignedFormula requiredAux = getIPLRuleAuxiliaryCandidate(rule, candidate, sfb);
-                    if (!formulaExistsInTree(current, requiredAux)) {
+                    if (!minorPremiseIsAvailable(current, requiredAux, candidate, mode)) {
                         // This rule's minor premise is not available - PB candidate
                         if (IPLTracer.isEnabled()) {
                             tracer.logInfo("PB: rule " + rule + " missing minor premise: " + requiredAux);
@@ -590,25 +643,44 @@ public class IPLPBRuleApplicator implements IProofTransformation {
     }
 
     /**
-     * When PB is blocked at label ci of the major premise (because F(aux):ci
-     * already exists), looks for accessible labels cj >= ci where neither
-     * T(aux):cj nor F(aux):cj exists yet, and applies PB there instead.
+     * When PB cannot be applied at the major premise's own label ci -- because that rule
+     * instance is already in {@code rinstances} -- this looks for another label where the
+     * same rule has an instance that is still available, which is just a different choice
+     * of {@code r} in Algorithm 1, line 7.
      *
-     * For example, for T(A->B):c1 with T(A):c23 missing:
-     *   - LEFT: T(A):c23 -> rule gives T(B):c23 -> T_AND -> T(p3):c23 contradicts F(p3):c23 -> CLOSES
-     *   - RIGHT: F(A):c23 -> Definition 5.3's condition for T(A->B):c1 at cj=c23 is satisfied
+     * <p>For example, for T(A-&gt;B):c1 with T(A):c23 missing:
+     * <ul>
+     *   <li>LEFT: T(A):c23 -&gt; rule gives T(B):c23 -&gt; T_AND -&gt; T(p3):c23 contradicts
+     *       F(p3):c23 -&gt; CLOSES</li>
+     *   <li>RIGHT: F(A):c23 -&gt; Definition 5.3's condition for T(A-&gt;B):c1 at cj=c23 is
+     *       satisfied</li>
+     * </ul>
      *
-     * NOTE: iterates the physical branch directly (getPhysicalFormulas()). The
+     * <p>Which labels are admissible depends on the rule's own constraint, and the two
+     * families point in opposite directions: F&and;<sub>1</sub>, F&and;<sub>2</sub> and
+     * F&rarr;<sub>3</sub> need the minor premise at cj &#8804; ci, while T&or;<sub>1</sub>,
+     * T&or;<sub>2</sub> and T&rarr;<sub>2</sub> need it at cj &#8805; ci. Rather than
+     * encode that per rule, every accessible label related to ci in either direction is
+     * offered to the rule, and the rule's own pattern decides: {@code generateIPLRuleConclusion}
+     * returns null exactly when the label constraint is not satisfied.
+     *
+     * <p>The conclusion is therefore computed <em>before</em> branching. A candidate label
+     * that yields no conclusion corresponds to no rule instance at all, so it must not
+     * split the branch (Algorithm 1 applies PB in line 8 only to supply {@code min(r)} for
+     * an instance r whose conclusion is then added in line 12) and must not be recorded in
+     * {@code rinstances}, which would block the instance from ever being retried.
+     *
+     * <p>NOTE: iterates the physical branch directly ({@code getPhysicalFormulas()}). The
      * accessible labels cj come from the Context, which already coincides with
-     * Cb = "constants occurring in b" (Definitions 3.1): the constants that
-     * occur in some physical formula of the branch.
+     * Cb = "constants occurring in b" (Definitions 3.1): the constants that occur in some
+     * physical formula of the branch.
      */
     private boolean tryPBAtAlternativeLabels(ClassicalProofTree current, SignedFormulaBuilder sfb,
             SignedFormula mainPremise, Rule rule, SignedFormula requiredAux,
             logic.labelledFormulas.ContextFormulaLabel ci, FormulaSign oppositeSign,
             IPLProofTree iplTree) {
 
-        // Collect accessible labels cj >= ci from the physical branch
+        // Accessible labels of the branch comparable with ci, in either direction.
         java.util.List<SignedFormula> physicalB = iplTree.getPhysicalFormulas();
         java.util.LinkedHashSet<logic.labelledFormulas.ContextFormulaLabel> labelsToTry =
                 new java.util.LinkedHashSet<>();
@@ -621,9 +693,19 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             logic.labelledFormulas.ContextFormulaLabel cj =
                     (logic.labelledFormulas.ContextFormulaLabel) l;
             if (cj.toString().equals(ci.toString())) continue;          // skip ci
-            if (!ci.getContext().isLowerOrEqualTo(ci, cj)) continue;    // need cj >= ci
+            Context ctx = ci.getContext();
+            if (!ctx.isLowerOrEqualTo(ci, cj) && !ctx.isLowerOrEqualTo(cj, ci)) continue;
             if (!iplTree.isLabelAccessible(cj)) continue;               // label must be accessible
             labelsToTry.add(cj);
+        }
+
+        // The major premise is the same for every candidate label.
+        SignedFormula mainPremiseForConclusion;
+        if (mainPremise.getLabel() instanceof logic.labelledFormulas.ContextFormulaLabel) {
+            mainPremiseForConclusion = mainPremise;
+        } else {
+            mainPremiseForConclusion = createIPLSignedFormulaWithLabel(sfb,
+                    (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), ci);
         }
 
         for (logic.labelledFormulas.ContextFormulaLabel cj : labelsToTry) {
@@ -647,6 +729,12 @@ public class IPLPBRuleApplicator implements IProofTransformation {
             String ruleKeyAlt = rule.toString() + ":" + mainPremise.toString() + ":" + auxWithCj.toString();
             if (iplTree.wasRuleInstanceApplied(ruleKeyAlt)) continue;
 
+            // Does the rule actually have an instance with the minor premise at cj? The
+            // rule's pattern checks its own label constraint, so a null conclusion means
+            // this label is not admissible for this rule. Nothing has been changed yet.
+            SignedFormula conclusion = generateIPLRuleConclusion(rule, mainPremiseForConclusion, auxWithCj, sfb);
+            if (conclusion == null) continue;
+
             if (IPLTracer.isEnabled()) {
                 tracer.logInfo("PB-ALT: label ci=" + ci + " blocked, applying PB at cj=" + cj
                         + " for aux " + requiredAux.getSign() + "(" + requiredAux.getFormula() + ")");
@@ -661,32 +749,18 @@ public class IPLPBRuleApplicator implements IProofTransformation {
                     auxWithCj, SignedFormulaNodeState.NOT_ANALYSED, strategy
                             .createOrigin(IPLRules.PB, current.getNode(mainPremise), null)));
 
-            // Apply the rule immediately on the left branch (conclusion at cj)
-            // Make sure mainPremise has a ContextFormulaLabel (same as in applyPBAndTwoPremiseRule)
-            SignedFormula mainPremiseForConclusion;
-            if (mainPremise.getLabel() instanceof logic.labelledFormulas.ContextFormulaLabel) {
-                mainPremiseForConclusion = mainPremise;
-            } else {
-                mainPremiseForConclusion = createIPLSignedFormulaWithLabel(sfb,
-                        (FormulaSign) mainPremise.getSign(), mainPremise.getFormula(), ci);
-            }
-            SignedFormula conclusion = generateIPLRuleConclusion(rule, mainPremiseForConclusion, auxWithCj, sfb);
-
-            // Register the rule instance in the global rinstances set BEFORE adding the
-            // conclusion to left (Algorithm 1, line 18): this way the viewer's per-node
-            // snapshot includes the rule that generated the conclusion.
+            // Register the rule instance in the global rinstances set (Algorithm 1, line 13).
+            // Registered before adding the conclusion so the viewer's per-node snapshot
+            // includes the rule that generated it.
             iplTree.registerRuleInstance(ruleKeyAlt);
 
-            if (conclusion != null) {
-                left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED,
-                        strategy.createOrigin(rule, current.getNode(mainPremise),
-                                left.getNode(auxWithCj))));
-            }
+            left.addLast(new SignedFormulaNode(conclusion, SignedFormulaNodeState.NOT_ANALYSED,
+                    strategy.createOrigin(rule, current.getNode(mainPremise),
+                            left.getNode(auxWithCj))));
 
             if (IPLTracer.isEnabled()) {
-                String concStr = conclusion != null ? conclusion.toString() : "(null)";
                 tracer.logRuleApplied(rule.toString(), mainPremise.toString(),
-                        auxWithCj.toString(), concStr);
+                        auxWithCj.toString(), conclusion.toString());
                 tracer.logPBApplied(mainPremise.toString(), rule.toString(),
                         auxWithCj.toString(), "left", "right");
             }
