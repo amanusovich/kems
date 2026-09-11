@@ -21,6 +21,7 @@ library shipped under `kems.prover/tests/resources/iltp/Problems` (274 problems:
     benchmarks/run-table.sh             # -> results/table.tsv   (a minute or two)
     benchmarks/run-library.sh DEFERRED  # -> results/library-deferred.tsv   (~30 min)
     benchmarks/run-library.sh IMMEDIATE # -> results/library-immediate.tsv  (~35 min)
+    benchmarks/render-md.sh             # -> results/table.md, results/library.md
 
 `run-table.sh` accepts problem ids as arguments to time other instances. `IltpRun` can
 also be invoked directly; see its javadoc for the options.
@@ -40,7 +41,7 @@ also be invoked directly; see its javadoc for the options.
 
 `closed` = proof found; `open` = completed branch, from which a counter-model is read off.
 
-### Full library (`results/library-*.tsv`)
+### Full library (`results/library-*.tsv`; per-problem table in `results/library.md`)
 
 | PB placement       | Decided / 274 | Timeout | Error | Disagree with ILTP |
 |--------------------|--------------:|--------:|------:|-------------------:|
@@ -56,5 +57,6 @@ The three errors are the same under both placements: SYN915+1 and SYN916+1 use t
 constants `$true`/`$false`, for which the implemented rule set (Table 2 of Solares-Rojas,
 Baldi and Rodriguez 2026) has no rule, so the input is rejected; SYN007+1.014 runs out of memory.
 
+`results/library.md` lists every problem under both placements side by side.
 Columns of the TSV files: `problem`, `expected` (ILTP status), `status` (`closed`,
 `open`, `timeout`, `error:<Exception>`), `ms`, `nodes`, `branches`.
