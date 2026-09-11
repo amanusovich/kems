@@ -1,16 +1,9 @@
 #!/usr/bin/env bash
-# Renders results/*.tsv as Markdown: results/table.md (selected instances) and
-# results/library.md (all problems, both PB placements side by side).
+# Refreshes the per-problem table in README.md (between the two markers) from
+# results/library-*.tsv, both PB placements side by side.
 set -euo pipefail
-R="$(cd "$(dirname "$0")" && pwd)/results"
-
-{
-  echo "| Problem | Expected | Status | Median ms | Nodes | Branches |"
-  echo "|---|---|---|---:|---:|---:|"
-  awk -F'\t' 'NR>1 { printf "| %s | %s | %s | %s | %s | %s |\n", $1,$2,$3,$4,$5,$6 }' "$R/table.tsv"
-} > "$R/table.md"
-
-{
+B="$(cd "$(dirname "$0")" && pwd)"; R="$B/results"
+TABLE="$(
   echo "| Problem | Expected | Deferred | ms | Nodes | Branches | Immediate | ms | Nodes | Branches |"
   echo "|---|---|---|---:|---:|---:|---|---:|---:|---:|"
   awk -F'\t' '
@@ -20,5 +13,9 @@ R="$(cd "$(dirname "$0")" && pwd)/results"
     END { for (k=1;k<=n;k++) { p=order[k]; split(d[p],a,"\t"); split(i[p],b,"\t");
           printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", p, exp_[p], a[1],a[2],a[3],a[4], b[1],b[2],b[3],b[4] } }
   ' "$R/library-deferred.tsv" "$R/library-immediate.tsv"
-} > "$R/library.md"
-echo "wrote $R/table.md and $R/library.md" >&2
+)"
+{
+  sed -n '1,/<!-- library-table:start -->/p' "$B/README.md"
+  printf '%s\n' "$TABLE"
+  sed -n '/<!-- library-table:end -->/,$p' "$B/README.md"
+} > "$B/README.md.tmp" && mv "$B/README.md.tmp" "$B/README.md"
