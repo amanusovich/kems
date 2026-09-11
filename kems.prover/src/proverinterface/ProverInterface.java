@@ -42,6 +42,7 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
 import proverinterface.commandline.CommandLineRunner;
+import proverinterface.proofviewer.IPLProofViewer;
 import proverinterface.proofviewer.ProofViewer;
 import proverinterface.runner.family.FamilyProblemsRunnerFrame;
 import proverinterface.runner.oneproblem.OneProblemAsStringRunnable;
@@ -671,7 +672,12 @@ public class ProverInterface extends JFrame implements ActionListener {
 	public void showProofViewer(IProof proof) {
 
 		if (proof != null) {
-			ProofViewer proofViewer = new ProofViewer(this);
+			ProofViewer proofViewer;
+			if (proverConfigurator.isIPL()) {
+				proofViewer = new IPLProofViewer(this);
+			} else {
+				proofViewer = new ProofViewer(this);
+			}
 			proofViewer.setValuation(proverConfigurator
 					.createValuation(((ExtendedProof) proof)
 							.getProverConfiguration().getStrategyName()));

@@ -12,7 +12,7 @@ import logic.signedFormulas.FormulaSign;
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.SignedFormulaFactory;
 import logic.signedFormulas.SignedFormulaList;
-import logicalSystems.classicalLogic.ClassicalSigns;
+import logicalSystems.ipl.IPLSigns;
 import logicalSystems.ipl.labels.LabelRole;
 import rules.KERuleRole;
 
@@ -29,16 +29,16 @@ public class BinaryConnectiveGetter implements  KELabelledFormulaGetter {
     LabelRole _label;
 
     public static final BinaryConnectiveGetter FALSE_LEFT = new BinaryConnectiveGetter(
-            ClassicalSigns.FALSE, KERuleRole.LEFT, LabelRole.SAME);
+            IPLSigns.FALSE, KERuleRole.LEFT, LabelRole.SAME);
 
     public static final BinaryConnectiveGetter FALSE_RIGHT = new BinaryConnectiveGetter(
-            ClassicalSigns.FALSE, KERuleRole.RIGHT, LabelRole.SAME);
+            IPLSigns.FALSE, KERuleRole.RIGHT, LabelRole.SAME);
 
     public static final BinaryConnectiveGetter TRUE_LEFT = new BinaryConnectiveGetter(
-            ClassicalSigns.TRUE, KERuleRole.LEFT, LabelRole.SAME);
+            IPLSigns.TRUE, KERuleRole.LEFT, LabelRole.SAME);
 
     public static final BinaryConnectiveGetter TRUE_RIGHT = new BinaryConnectiveGetter(
-            ClassicalSigns.TRUE, KERuleRole.RIGHT, LabelRole.SAME);
+            IPLSigns.TRUE, KERuleRole.RIGHT, LabelRole.SAME);
 
     private BinaryConnectiveGetter(FormulaSign sign, KERuleRole role, LabelRole labelRole) {
         _sign = sign;

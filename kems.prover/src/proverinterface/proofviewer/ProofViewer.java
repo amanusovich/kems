@@ -6,6 +6,7 @@ package proverinterface.proofviewer;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
@@ -13,14 +14,23 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseListener;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.io.File;
+import java.io.IOException;
 
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.ColorUIResource;
 
+import main.newstrategy.ipl.IPLTracer;
 import proverinterface.ProverInterface;
 
 import logic.valuation.AbstractValuation;
@@ -164,21 +174,7 @@ public class ProofViewer extends JFrame implements ActionListener,
 	}
 
 	public void showOn() {
-		// Make sure we have nice window decorations.
 		JFrame.setDefaultLookAndFeelDecorated(true);
-
-		// Create and set up the window.
-		// proofViewerFrame = new JFrame("KEMS Proof Viewer #"
-		// + getInstanceNumber());
-		// proofViewerFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-		//
-		// proofViewerFrame.setContentPane(this.getContentPane());
-		// proofViewerFrame.addWindowListener(this);
-		//
-		// //Display the window.
-		// proofViewerFrame.pack();
-		// proofViewerFrame.setVisible(true);
-		// proofViewerFrame.setLocation(10,10);
 
 		setTitle("KEMS Proof Viewer #" + getInstanceNumber());
 		setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -186,10 +182,47 @@ public class ProofViewer extends JFrame implements ActionListener,
 		setContentPane(this.getContentPane());
 		addWindowListener(this);
 
-		// Display the window.
+		JMenuBar menuBar = new JMenuBar();
+		JMenu fileMenu = new JMenu("File");
+		JMenuItem exportHtmlItem = new JMenuItem("Export HTML...");
+		exportHtmlItem.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent ev) {
+				exportProofAsHtml();
+			}
+		});
+		fileMenu.add(exportHtmlItem);
+		menuBar.add(fileMenu);
+		setJMenuBar(menuBar);
+
 		pack();
 		setVisible(true);
 		setLocation(10, 10);
+	}
+
+	private void exportProofAsHtml() {
+		if (proof == null) {
+			JOptionPane.showMessageDialog(this, "No proof loaded.", "Export HTML", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		JFileChooser chooser = new JFileChooser();
+		chooser.setDialogTitle("Export IPL Proof as HTML");
+		chooser.setFileFilter(new FileNameExtensionFilter("HTML files", "html"));
+		chooser.setSelectedFile(new File("ipl_proof.html"));
+		if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+			File file = chooser.getSelectedFile();
+			if (!file.getName().endsWith(".html")) {
+				file = new File(file.getAbsolutePath() + ".html");
+			}
+			try {
+				IPLHtmlExporter.export(proof, file.getAbsolutePath(), IPLTracer.getInstance());
+				if (Desktop.isDesktopSupported()) {
+					Desktop.getDesktop().browse(file.toURI());
+				}
+			} catch (IOException ex) {
+				JOptionPane.showMessageDialog(this, "Error exporting: " + ex.getMessage(),
+						"Export HTML", JOptionPane.ERROR_MESSAGE);
+			}
+		}
 	}
 
 	/*
@@ -339,11 +372,13 @@ public class ProofViewer extends JFrame implements ActionListener,
 				.getHeight(), getMaxStringLength(), getFontSize());
 		
 		} catch(Throwable e){
-			if (e instanceof OutOfMemoryError){
-				proverInterface.showErrorMessage(ProverInterface.OUT_OF_MEMORY_MESSAGE);
-			}
-			else{
-				proverInterface.showErrorMessage(e.getMessage());
+			if (proverInterface != null) {
+				if (e instanceof OutOfMemoryError){
+					proverInterface.showErrorMessage(ProverInterface.OUT_OF_MEMORY_MESSAGE);
+				}
+				else{
+					proverInterface.showErrorMessage(e.getMessage());
+				}
 			}
 			closeWithError();
 		}
@@ -405,6 +440,10 @@ public class ProofViewer extends JFrame implements ActionListener,
 	 */
 	public FullViewProofPane getFullViewProofPane() {
 		return fullViewProofPane;
+	}
+
+	protected InteractiveProofPane getInteractiveProofPane() {
+		return interactiveProofPane;
 	}
 
 	public Dimension getPaneSize() {

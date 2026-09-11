@@ -31,7 +31,14 @@ public class OnePremiseOneConclusionRule extends OneConclusionIPLRule {
 			return null;
 		}
 		*/
-	    return getPossibleConclusions((LabelledFormulaFactory) sff, sff, ff, sfl);
+	    // Verificación segura para IPL
+	    LabelledFormulaFactory lff;
+	    if (sff instanceof LabelledFormulaFactory) {
+	        lff = (LabelledFormulaFactory) sff;
+	    } else {
+	        lff = new LabelledFormulaFactory();
+	    }
+	    return getPossibleConclusions(lff, sff, ff, sfl);
 	}
 
 	public SignedFormulaList getPossibleConclusions(LabelledFormulaFactory lff, SignedFormulaFactory sff,
@@ -41,7 +48,6 @@ public class OnePremiseOneConclusionRule extends OneConclusionIPLRule {
 			LabelledFormula lf = getConclusion().getLabelledFormula(lff, ff, lfl);
 			return new SignedFormulaList(lf);
 		} else {
-            System.err.println(this+ " null for " + lfl);
 			return null;
 		}
 	}

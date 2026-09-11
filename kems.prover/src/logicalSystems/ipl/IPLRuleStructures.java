@@ -8,14 +8,12 @@ import logic.formulas.Connective;
 import logic.logicalSystem.ISignature;
 import logic.signedFormulas.FormulaSign;
 import rules.KERuleRole;
-import rules.ipl.OnePremiseOneConclusionRule;
 import rules.Rule;
 import rules.ipl.TwoPremisesOneConclusionRule;
 import rules.structures.ConnectiveRoleSignRuleList;
 import rules.structures.ConnectiveRuleStructureFactory;
 import rules.structures.IPLConnectiveRoleSignRuleList;
 import rules.structures.IPLOnePremiseRuleList;
-import rules.structures.OnePremiseRuleList;
 import rules.structures.PBRuleList;
 import rules.structures.RuleList;
 import rules.structures.RuleType;
@@ -55,6 +53,7 @@ public class IPLRuleStructures {
         /** one premise rules */
         onePremiseRules = initializeOnePremiseRuleList();
         /** one premise simplification rules */
+        topAndBottomRulesNew = new TopBottomRoleRuleList(); // Inicializar vacía por ahora
         //topAndBottomRulesNew = initializeTBRuleList();
         /** Two premise substitution rules */
         twoPremiseRules = initializeTwoPremiseRuleList();
@@ -78,82 +77,65 @@ public class IPLRuleStructures {
     }
 
     /**
-     * @return
+     * PB Rules: Usado solo cuando las reglas operacionales no pueden aplicarse.
+     * Según el nuevo conjunto de reglas simplificado, PB se usa para:
+     * - F A∧B (no tiene regla operacional)
+     * - T A∨B (no tiene regla operacional)
+     * - T A→B cuando falta la premisa menor (T A)
+     * 
+     * NOTA: El conjunto simplificado NO incluye reglas de 2 premisas para F∧ y T∨,
+     * por lo que PB es la única forma de procesarlas.
      */
     private PBRuleList initializePBRuleList() {
         PBRules = new PBRuleList();
 
-        addToPBRules(IPLSigns.FALSE, IPLConnectives.AND,
-                IPLRules.F_AND_LEFT);
-        //addToPBRules(IPLSigns.TRUE, IPLConnectives.OR,
-        //        IPLRules.T_OR_LEFT);
+        // PB para T A→B cuando no hay T A disponible (para T_IMPLIES_LEFT)
         addToPBRules(IPLSigns.TRUE, IPLConnectives.IMPLIES,
                 IPLRules.T_IMPLIES_LEFT);
-
-        /** rules for applying PB - with biimplication */
-        /*
-        addToPBRules(IPLSigns.TRUE, IPLConnectives.BIIMPLIES,
-                IPLRules.T_BIIMPLIES_LEFT_TRUE,
-                IPLRules.T_BIIMPLIES_LEFT_FALSE);
-        addToPBRules(IPLSigns.FALSE, IPLConnectives.BIIMPLIES,
-                IPLRules.F_BIIMPLIES_LEFT_TRUE,
-                IPLRules.F_BIIMPLIES_LEFT_FALSE); 
-		 */
-        /** rules for applying PB - with XOR */
-        /*
-        PBRules.add(IPLSigns.TRUE, IPLConnectives.XOR,
-                        IPLRules.T_XOR_LEFT_TRUE,
-                        IPLRules.T_XOR_LEFT_FALSE);
-        PBRules.add(IPLSigns.FALSE, IPLConnectives.XOR,
-                        IPLRules.F_XOR_LEFT_TRUE,
-                        IPLRules.F_XOR_LEFT_FALSE);
-        */
         
+        // NOTA: F A∧B y T A∨B NO tienen reglas operacionales en el nuevo conjunto,
+        // pero PB se maneja dinámicamente en IPLPBRuleApplicator sin necesidad de registro aquí.
+
         return PBRules;
     }
 
     private IPLConnectiveRoleSignRuleList initializeTwoPremiseRuleList() {
         twoPremiseRules = new IPLConnectiveRoleSignRuleList();
 
-        // Regla 3
-        addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
-                IPLSigns.TRUE, IPLRules.X_OR_F_LEFT);
-        // Regla 4
-        addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.RIGHT,
-                IPLSigns.TRUE, IPLRules.T_OR_F_RIGHT);
-        // Regla 6
-        addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
-                IPLSigns.TRUE, IPLRules.T_A_OR_B);
-        // Regla 7
-        addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.RIGHT,
-                IPLSigns.TRUE, IPLRules.T_A_OR_B_NOT_B);
+        // Reglas que usan PB cuando falta premisa menor:
         
-        // Regla 8
+        // F A∧B : cj, T B : ci (ci ≤ cj) → F A : cj
+        // PB genera T B si no existe, luego aplica esta regla
+        addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.RIGHT,
+                IPLSigns.FALSE, IPLRules.F_AND_RIGHT);
+        
+        // F A∧B : cj, T A : ci (ci ≤ cj) → F B : cj
         addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.LEFT,
                 IPLSigns.FALSE, IPLRules.F_AND_LEFT);
-        // Regla 9
-        addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.RIGHT,
-                IPLSigns.FALSE, IPLRules.X_AND_T_RIGHT);
-        // Regla 10
-        addToTwoPremiseRules(IPLConnectives.NOT, KERuleRole.LEFT,
-                IPLSigns.TRUE, IPLRules.T_NOT_A_AND_B);
-        // Regla 11
-        addToTwoPremiseRules(IPLConnectives.NOT, KERuleRole.RIGHT,
-                IPLSigns.TRUE, IPLRules.T_NOT_AND_LEFT);
         
-        
-        // Regla 12
+        // (T→₁) - T-Implicación (Modus Ponens)
+        // T A→B : ci, T A : cj, ci ⪯ ck and cj ⪯ ck → T B : ck
         addToTwoPremiseRules(IPLConnectives.IMPLIES, KERuleRole.LEFT,
                 IPLSigns.TRUE, IPLRules.T_IMPLIES_LEFT);
         
-        // 13
+        // (T→₂) - T-Implicación (Modus Tollens)
+        // T A→B : ci, F B : cj, ci ⪯ cj → F A : cj
         addToTwoPremiseRules(IPLConnectives.IMPLIES, KERuleRole.RIGHT,
                 IPLSigns.TRUE, IPLRules.X_IMPLIES_F_RIGHT);
         
-        // Regla 16
-        addToTwoPremiseRules(IPLConnectives.IMPLIES, KERuleRole.RIGHT,
-                IPLSigns.TRUE, IPLRules.T_X_IMPLIES_Y_NOT_Y);
+        // (F→₃) - F-Implicación con T A existente
+        // F A→B : cj, T A : ci, ci ⪯ cj → F B : cj
+        addToTwoPremiseRules(IPLConnectives.IMPLIES, KERuleRole.LEFT,
+                IPLSigns.FALSE, IPLRules.F_IMPLIES_T_LEFT);
         
+        // (T∨₁) - T A∨B : ci, F A : cj, ci ⪯ cj → T B : ci
+        addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
+                IPLSigns.TRUE, IPLRules.T_OR_F_LEFT);
+        
+        // (T∨₂) - T A∨B : ci, F B : cj, ci ⪯ cj → T A : ci
+        addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.RIGHT,
+                IPLSigns.TRUE, IPLRules.T_OR_F_RIGHT);
+
         return twoPremiseRules;
     }
 
@@ -173,23 +155,18 @@ public class IPLRuleStructures {
         addToOnePremiseRules(IPLSigns.TRUE, IPLConnectives.AND,
                 IPLRules.T_AND);
 
-        // Regla 5?
-        addToOnePremiseRules(IPLSigns.TRUE, IPLConnectives.NOT,
-                IPLRules.T_NOT_A_OR_B);
 
         // Regla 14
         addToOnePremiseRules(IPLSigns.FALSE, IPLConnectives.IMPLIES,
                 IPLRules.F_A_IMPLIES_B_TA_FB);
-        // Regla 15
+   
+        // Regla 10
         addToOnePremiseRules(IPLSigns.TRUE, IPLConnectives.NOT,
-                IPLRules.T_NOT_A_IMPLIES_B_TA_FB);
+                IPLRules.T_NOT);
         // Regla 17
         addToOnePremiseRules(IPLSigns.FALSE, IPLConnectives.NOT,
                 IPLRules.F_NOT);
-        // Regla 18
-        addToOnePremiseRules(IPLSigns.TRUE, IPLConnectives.NOT,
-                IPLRules.T_NOT_NOT);
-
+     
         return onePremiseRules;
     }
 

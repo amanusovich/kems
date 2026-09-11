@@ -10,13 +10,17 @@ import logic.signedFormulas.FormulaSign;
 import logic.signedFormulas.SignedFormula;
 import logic.signedFormulas.SignedFormulaFactory;
 
-public class LabelledFormulaFactory  extends SignedFormulaFactory {
+public class LabelledFormulaFactory extends SignedFormulaFactory {
 	
 	Map<String, SignedFormula> _signedFormulas;
 	
     public LabelledFormulaFactory() {
         _signedFormulas = new TreeMap<String, SignedFormula>();
     }
+
+	public LabelledFormula createLabelledFormula(SignedFormula aSignedFormula) {
+		return new LabelledFormula(aSignedFormula);
+	}
 
 	public LabelledFormula createLabelledFormula(FormulaLabel aFormulaLabel, SignedFormula aSignedFormula) {
 		return new LabelledFormula(aFormulaLabel, aSignedFormula);

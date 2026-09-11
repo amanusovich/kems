@@ -113,5 +113,14 @@
     <orderEntry type="library" name="aspectj.aspectjrt" level="application" />
     <orderEntry type="library" name="aspectj.aspectjtools" level="application" />
     <orderEntry type="library" name="aspectj.aspectjweaver" level="application" />
+    <orderEntry type="module-library" exported="">
+      <library>
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/kems.export/lib/generated/satpablo.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES />
+      </library>
+    </orderEntry>
   </component>
 </module>

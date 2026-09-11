@@ -41,7 +41,6 @@ public class SubformulaRoleGetter implements KELabelledFormulaGetter, Subformula
 	@Override
 	public LabelledFormula getLabelledFormula(LabelledFormulaFactory lff, SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList lfl) {
-		System.out.println("Hola");
 		Formula matchedSubformula = _pattern.getMatchedSubformula(lfl);
         return getLabelledFormula(lff, sff, ff, lfl, matchedSubformula);
 		
@@ -67,11 +66,7 @@ public class SubformulaRoleGetter implements KELabelledFormulaGetter, Subformula
             }
 
         } else {
-            //            System.err.println("LR");
-
             Formula substitution = (Formula) _role.getFormulas(f).get(0);
-            //            System.out.println(substitution + " " + f + " " + sfl.get(0) + "
-            // " + substitute(sff, ff, sfl, f, substitution));
             return substitute(lff, sff, ff, sfl, f, substitution);
         }
 
@@ -92,7 +87,6 @@ public class SubformulaRoleGetter implements KELabelledFormulaGetter, Subformula
 	            FormulaFactory ff, SignedFormulaList sfl, Formula f) {
 
 	    	List<Formula> l = f.getImmediateSubformulas();
-	        //        System.out.println(f + " " + l);
 
 	        if (_role.equals(KERuleRole.OTHER)) {
 	            Formula auxFormula = sfl.get(1).getFormula();
@@ -108,8 +102,6 @@ public class SubformulaRoleGetter implements KELabelledFormulaGetter, Subformula
 	            }
 
 	        } else {
-	            //            System.err.println("LR");
-
 	            Formula substitution = (Formula) _role.getFormulas(f).get(0);
 	            
 	            if (this.conclussionSign == null) {
@@ -130,7 +122,6 @@ public class SubformulaRoleGetter implements KELabelledFormulaGetter, Subformula
             FormulaFactory ff, SignedFormulaList sfl, Formula f) {
 
     	List<Formula> l = f.getImmediateSubformulas();
-        //        System.out.println(f + " " + l);
 
         if (_role.equals(KERuleRole.OTHER)) {
             Formula auxFormula = sfl.get(1).getFormula();
@@ -146,8 +137,6 @@ public class SubformulaRoleGetter implements KELabelledFormulaGetter, Subformula
             }
 
         } else {
-            //            System.err.println("LR");
-
             Formula substitution = (Formula) _role.getFormulas(f).get(0);
             return lff.createLabelledFormula(
                 "c", 

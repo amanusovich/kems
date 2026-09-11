@@ -59,12 +59,31 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 		MouseListener {
 
 	/**
+	 * Callback invoked when the user clicks a formula node.
+	 * Allows IPLProofViewer to update its detail side panel.
+	 */
+	public interface FormulaSelectionListener {
+		void onFormulaSelected(SignedFormulaNode sfn, IProofTree branch);
+	}
+
+	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 2966437180162772814L;
 
 	/** the parent proof viewer */
 	private ProofViewer proofViewer;
+
+	/** optional listener notified on formula click (used by IPLProofViewer) */
+	private FormulaSelectionListener formulaSelectionListener;
+
+	/**
+	 * Optional predicate that controls which formula nodes are rendered.
+	 * If set, nodes for which the predicate returns {@code false} are hidden.
+	 * Used by IPLProofViewer to suppress PROPAGATION-origin nodes from the
+	 * main tree (those are surfaced separately in the b* Extensions panel).
+	 */
+	private java.util.function.Predicate<SignedFormulaNode> nodeFilter = null;
 
 	/** the current last proof tree node */
 	private IClassicalProofTree lastNode;
@@ -191,13 +210,14 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 				repaint();
 			}
 		} catch (Throwable e) {
-			if (e instanceof OutOfMemoryError) {
-				proofViewer.getProverInterface().showErrorMessage(
-						ProverInterface.OUT_OF_MEMORY_MESSAGE);
-			} else {
-				proofViewer.getProverInterface().showErrorMessage(
-						e.getMessage());
-
+			if (proofViewer.getProverInterface() != null) {
+				if (e instanceof OutOfMemoryError) {
+					proofViewer.getProverInterface().showErrorMessage(
+							ProverInterface.OUT_OF_MEMORY_MESSAGE);
+				} else {
+					proofViewer.getProverInterface().showErrorMessage(
+							e.getMessage());
+				}
 			}
 			close();
 		}
@@ -435,6 +455,11 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 
 			SignedFormulaNode sfn = (SignedFormulaNode) n;
 
+			// Apply node filter (e.g. hide PROPAGATION-origin nodes in IPL)
+			if (nodeFilter != null && !nodeFilter.test(sfn)) {
+				continue; // do NOT advance isFirst — next visible node owns it
+			}
+
 			// if this is the first node in the branch
 			// but this is not the first branch
 			if (isFirst && (current != proof.getProofTree())) {
@@ -488,6 +513,12 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 			fb.addMouseListener(this);
 			formulasToButtons.put(sfn, fb);
 			fb.setBackground(proofViewer.getSelectedFormulaButtonColor());
+		}
+		if (proofViewer instanceof IPLProofViewer
+				&& sfn.getOrigin() instanceof main.proofTree.origin.SignedFormulaNodeOrigin) {
+			String ruleName = ((main.proofTree.origin.SignedFormulaNodeOrigin) sfn.getOrigin())
+					.getRule().toString();
+			fb.setForeground(IPLColorScheme.getColor(ruleName));
 		}
 		return fb;
 	}
@@ -571,6 +602,17 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 		area = d;
 	}
 
+	/** Registers a listener that is notified whenever a formula button is clicked. */
+	public void setFormulaSelectionListener(FormulaSelectionListener listener) {
+		this.formulaSelectionListener = listener;
+	}
+
+	/** Sets a filter predicate; nodes that fail the predicate are not rendered. */
+	public void setNodeFilter(java.util.function.Predicate<SignedFormulaNode> filter) {
+		this.nodeFilter = filter;
+		setChanged(true);
+	}
+
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -579,7 +621,12 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 	public void mouseClicked(MouseEvent e) {
 		clearAllHighlighted();
 		if (e.getSource() instanceof FormulaButton) {
-			highlightPathToFormula((FormulaButton) e.getSource());
+			FormulaButton fb = (FormulaButton) e.getSource();
+			highlightPathToFormula(fb);
+			if (formulaSelectionListener != null) {
+				formulaSelectionListener.onFormulaSelected(
+						fb.getSignedFormulaNode(), lastNode);
+			}
 		}
 	}
 
@@ -603,7 +650,8 @@ public class InteractiveProofPane extends JPanel implements ActionListener,
 		fb.setBackground(proofViewer.getHiglightedFormulaButtonColor());
 		fb.repaint();
 
-		if (!(fb.getSignedFormulaNode().getOrigin().equals(NamedOrigin.DEFINITION) || fb
+		if (fb.getSignedFormulaNode().getOrigin() != null
+				&& !(fb.getSignedFormulaNode().getOrigin().equals(NamedOrigin.DEFINITION) || fb
 				.getSignedFormulaNode().getOrigin().equals(NamedOrigin.PROBLEM))) {
 
 			SignedFormulaNode main = (fb.getSignedFormulaNode().getOrigin())

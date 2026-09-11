@@ -32,9 +32,17 @@ public class KERuleRole {
 
     public List<Formula> getFormulas(Formula f) {
         List<Formula> result = new ArrayList<Formula>();   // new ArrayList<Formula>();
+        
+        if (f.getImmediateSubformulas().isEmpty()) {
+            return result; // Return empty list instead of crashing
+        }
+        
         if (this.equals(KERuleRole.LEFT)) {
             result.add(f.getImmediateSubformulas().get(0));
         } else if (this.equals(KERuleRole.RIGHT)) {
+            if (f.getImmediateSubformulas().size() < 2) {
+                return result; // Return empty list
+            }
             result.add(f.getImmediateSubformulas().get(1));
         } else if (this.equals(KERuleRole.ANY)) {
             return f.getImmediateSubformulas();

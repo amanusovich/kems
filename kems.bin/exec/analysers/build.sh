@@ -38,4 +38,4 @@ echo
 echo Starting Ant...
 echo
 
-$JAVA_HOME_KEMS -Dant.home=$ANT_HOME -classpath $LOCALCLASSPATH${PS} org.apache.tools.ant.Main $*
+$JAVA_HOME_KEMS/bin/java -Dant.home=$ANT_HOME -classpath $LOCALCLASSPATH${PS} org.apache.tools.ant.Main $*

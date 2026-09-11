@@ -79,17 +79,26 @@ public class FormulaLabel implements Comparable<FormulaLabel>{
 	}
 
 	public boolean lowerOrEqualThan(FormulaLabel aux) {
-		return this.index <= aux.getIndex();
+		boolean result = this.index <= aux.getIndex();
+		// System.out.println("DEBUG: FormulaLabel.lowerOrEqualThan - this: " + this + " (index=" + this.index + "), aux: " + aux + " (index=" + aux.getIndex() + "), result: " + result);
+		return result;
 	}
 	public boolean lowerThan(FormulaLabel aux) {
 		return this.index < aux.getIndex();
 	}
 
     public FormulaLabel getGreaterFormulaLabel() {
-		throw new NotImplementedException();
+		// Para IPL: crear una nueva etiqueta con índice mayor
+		return new FormulaLabel(this.type, this.index + 1);
     }
 
 	public FormulaLabel getLowerFormulaLabel() {
-		throw new NotImplementedException();
+		// Para IPL: crear una nueva etiqueta con índice menor (si es posible)
+		if (this.index > 0) {
+			return new FormulaLabel(this.type, this.index - 1);
+		} else {
+			// Si ya es el índice 0, devolver una nueva etiqueta c0
+			return new FormulaLabel(this.type, 0);
+		}
 	}
 }

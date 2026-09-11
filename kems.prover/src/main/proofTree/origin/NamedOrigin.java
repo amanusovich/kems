@@ -32,6 +32,8 @@ public class NamedOrigin implements IOrigin {
 
 	public static final NamedOrigin LEARNING = new NamedOrigin("Introduced by learning");
 
+	public static final NamedOrigin PROPAGATION = new NamedOrigin("Kripke monotonicity propagation");
+
 	public static List<SignedFormulaNode> EMPTY_SFN_LIST;
 
 	private NamedOrigin(String message) {

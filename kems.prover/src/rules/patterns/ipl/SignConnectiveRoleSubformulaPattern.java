@@ -42,9 +42,11 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
 	    SignedFormulaList lfl = new SignedFormulaList();
 	    lfl.add(main);
 	    lfl.add(auxiliary);
-	    boolean labelCondition = _labelCondition.matches(lfl); 
-        return labelCondition && auxiliary.getSignedFormula().getSign().equals(_auxiliarySign)
-                && recursivelyMatches(main.getSignedFormula().getFormula(), auxiliary);
+	    boolean labelCondition = _labelCondition.matches(lfl);
+	    boolean signCondition = auxiliary.getSignedFormula().getSign().equals(_auxiliarySign);
+	    boolean formulaCondition = recursivelyMatches(main.getSignedFormula().getFormula(), auxiliary);
+	    
+        return labelCondition && signCondition && formulaCondition;
 	}
 
 	private boolean recursivelyMatches(Formula main, LabelledFormula auxiliary) {
@@ -64,15 +66,12 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
     private boolean matches(Formula main, LabelledFormula auxiliary) {
 
         boolean mainMatch = matchesConnective(main);
-        //		System.err.println(mainMatch);
 
         if (mainMatch) {
         	List<Formula> l = _auxiliaryRole.getFormulas(main);
 
             for (int i = 0; i < l.size(); i++) {
                 Formula f1 = (Formula) l.get(i);
-                //				System.err.println(f1);
-                //				System.err.println(auxiliary);
                 if (f1.equals(auxiliary.getSignedFormula().getFormula())) {
                     return true;
                 }
@@ -136,15 +135,12 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
         Formula tryMatch = getMatchedSubformula(main, auxiliary);
         if (tryMatch != null) {
 
-            //			System.err.println(tryMatch + " aqui � tryMatch");
             return tryMatch;
         } else {
             for (int i = 0; i < main.getImmediateSubformulas().size(); i++) {
                 tryMatch = recursivelyGetMatchedSubformula((Formula) main
                         .getImmediateSubformulas().get(i), auxiliary);
                 if (tryMatch != null) {
-                    //					System.err.println(main.getImmediateSubformulas().get(i)
-                    // + " aqui � ...");
                     return tryMatch;
                     //					(Formula)main.getImmediateSubformulas().get(i);
                 }
@@ -163,10 +159,7 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
 
             for (int i = 0; i < l.size(); i++) {
                 Formula f1 = (Formula) l.get(i);
-                //				System.err.println(f1);
-                //				System.err.println(auxiliary);
                 if (f1.equals(auxiliary.getSignedFormula().getFormula())) {
-                    //					System.err.println(main + " aqui");
                     return main;
                 }
 
@@ -194,8 +187,6 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
         if (!(auxiliary.getSign().equals(_auxiliarySign))) {
             return null;
         } else {
-            //			System.err.println(recursivelyGetMatchedSubformula(main.getFormula(),
-            // auxiliary)+" aqui � recGet");
             return recursivelyGetMatchedSubformula(main.getFormula(), auxiliary);
 
         }
@@ -207,15 +198,12 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
         Formula tryMatch = getMatchedSubformula(main, auxiliary);
         if (tryMatch != null) {
 
-            //			System.err.println(tryMatch + " aqui � tryMatch");
             return tryMatch;
         } else {
             for (int i = 0; i < main.getImmediateSubformulas().size(); i++) {
                 tryMatch = recursivelyGetMatchedSubformula((Formula) main
                         .getImmediateSubformulas().get(i), auxiliary);
                 if (tryMatch != null) {
-                    //					System.err.println(main.getImmediateSubformulas().get(i)
-                    // + " aqui � ...");
                     return tryMatch;
                     //					(Formula)main.getImmediateSubformulas().get(i);
                 }
@@ -228,17 +216,13 @@ public class SignConnectiveRoleSubformulaPattern implements IBinarySignedFormula
     private Formula getMatchedSubformula(Formula main, SignedFormula auxiliary) {
 
          boolean mainMatch = matchesConnective(main);
-        //		System.err.println(mainMatch);
 
         if (mainMatch) {
         	List<Formula> l = _auxiliaryRole.getFormulas(main);
 
             for (int i = 0; i < l.size(); i++) {
                 Formula f1 = (Formula) l.get(i);
-                //				System.err.println(f1);
-                //				System.err.println(auxiliary);
                 if (f1.equals(auxiliary.getFormula())) {
-                    //					System.err.println(main + " aqui");
                     return main;
                 }
 

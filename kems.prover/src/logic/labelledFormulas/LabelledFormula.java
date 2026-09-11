@@ -14,6 +14,12 @@ public class LabelledFormula  extends SignedFormula {
 		this.signedFormula = aSignedFormula;
 		//this._label = aLabel;
 	}
+
+	public LabelledFormula(SignedFormula aSignedFormula) {
+		super(aSignedFormula.getSign(), aSignedFormula.getFormula(), aSignedFormula.getLabel());
+		this.signedFormula = aSignedFormula;
+		//this._label = aLabel;
+	}
 	
 	/*
 	public FormulaLabel getLabel() {
@@ -43,10 +49,13 @@ public class LabelledFormula  extends SignedFormula {
 	}
 	
     public String toString() {
-    	if (this.getLabel() == null) {
-    		System.out.println("Sin label");
-    	}
-        return signedFormula.toString() + " " + this.getLabel().toString();
+    	// LabelledFormula hereda de SignedFormula, que ya maneja las etiquetas
+    	// Usar el toString() del padre (SignedFormula) directamente
+    	String sign = this.getSign().toString();
+    	String formula = this.getFormula().toString();
+    	String label = this.getLabel() != null ? " " + this.getLabel().toString() : "";
+    	
+    	return sign + " " + formula + label;
     }
 
 }

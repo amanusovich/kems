@@ -279,6 +279,10 @@ public abstract class AbstractSimpleStrategy implements ISimpleStrategy {
 		return sfb;
 	}
 
+	protected void setSignedFormulaBuilder(SignedFormulaBuilder sfb) {
+		this.sfb = sfb;
+	}
+
 	/**
 	 * @param method
 	 */

@@ -31,7 +31,7 @@ public class OnePremiseTwoConclusionsLabelOverrideRule extends OnePremiseTwoConc
     		KELabelledAction conclusion1,
     		KELabelledAction conclusion2,
     		LabelGetter labelGetter) {
-    	super(name, premise, conclusion2, conclusion2);
+    	super(name, premise, conclusion1, conclusion2);
         _premise = premise;
         _conclusion1 = conclusion1;
         _conclusion2 = conclusion2;
@@ -42,7 +42,14 @@ public class OnePremiseTwoConclusionsLabelOverrideRule extends OnePremiseTwoConc
 	@Override
 	public SignedFormulaList getPossibleConclusions(SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList sfl) {
-        return this.getPossibleConclusions((LabelledFormulaFactory) sff, sff, ff, sfl);
+        // Verificación segura para IPL - crear LabelledFormulaFactory si es necesario
+        LabelledFormulaFactory lff;
+        if (sff instanceof LabelledFormulaFactory) {
+            lff = (LabelledFormulaFactory) sff;
+        } else {
+            lff = new LabelledFormulaFactory();
+        }
+        return this.getPossibleConclusions(lff, sff, ff, sfl);
 	}
 
 	@Override

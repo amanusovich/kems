@@ -33,17 +33,17 @@ public class TwoLevelCompositeFormulaPattern implements IUnaryLabelledFormulaPat
 		if (sf.getFormula() instanceof CompositeFormula) {
 			CompositeFormula formula =  (CompositeFormula) sf.getFormula();
 			if (formula.getConnective().equals(this.first)) {
+				if (formula.getImmediateSubformulas().isEmpty()) {
+					return false;
+				}
 				Formula sub = formula.getImmediateSubformulas().get(0);
 				if (sub instanceof CompositeFormula) {
 					CompositeFormula subformula = (CompositeFormula) sub;
 					if (subformula.getConnective().equals(this.second)) {
 						return true;
 					}
-					
 				}
 			}
-
-			
 		}
 		return false;
 	}

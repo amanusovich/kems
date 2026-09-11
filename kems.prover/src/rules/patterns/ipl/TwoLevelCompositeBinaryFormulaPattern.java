@@ -90,13 +90,29 @@ public class TwoLevelCompositeBinaryFormulaPattern implements IBinarySignedFormu
     	
     	// we go down one level
     	Formula mainFormula = sfMain.getFormula();
+    	
+    	// Check if we have subformulas at all
+    	if (mainFormula.getImmediateSubformulas().isEmpty()) {
+    		return new SignedFormulaList(); // Return empty list
+    	}
+    	
     	Formula subFormula = mainFormula.getImmediateSubformulas().get(0);
+    	
+    	// Check if subformula is composite (has the expected structure)
+    	if (!(subFormula instanceof CompositeFormula)) {
+    		return new SignedFormulaList(); // Return empty list for atomic subformulas
+    	}
+    	
+    	// Check if the composite subformula has the expected connective
+    	CompositeFormula compSubFormula = (CompositeFormula) subFormula;
+    	if (!compSubFormula.getConnective().equals(second)) {
+    		return new SignedFormulaList(); // Return empty list for wrong connective
+    	}
     	
 		List<Formula> formulas = auxRole.getFormulas(subFormula);
         SignedFormulaList sfl = new SignedFormulaList();
 
         for (int i = 0; i < formulas.size(); i++) {
-
         	sfl.add(
     			sff.createSignedFormula(auxiliarySign, (Formula) formulas.get(i))
             );
