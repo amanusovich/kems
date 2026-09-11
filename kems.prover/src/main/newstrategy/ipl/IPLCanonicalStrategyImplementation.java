@@ -1,6 +1,5 @@
 package main.newstrategy.ipl;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -346,8 +345,7 @@ public class IPLCanonicalStrategyImplementation {
         Context ctx = firstContext(constantLabels);
         if (ctx == null) return true; // no constant labels yet — nothing to check
 
-        Map<String, Boolean> memo = new HashMap<>();
-        Map<String, Boolean> trueCache = branch.getDef53TrueCache(ctx);
+        IPLProofTree.Def53Memo memo = branch.getDef53Memo(ctx);
 
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = branch.getTopDownIterator();
         while (it.hasNext()) {
@@ -358,10 +356,11 @@ public class IPLCanonicalStrategyImplementation {
             if (!(sf.getFormula() instanceof CompositeFormula)) continue;
 
             LabelledFormula lf = (LabelledFormula) sf;
-            if (!(lf.getLabel() instanceof ContextFormulaLabel)) continue;
+            if (lf.getLabel() == null) continue;
+            requireConstantLabel(lf);
 
             boolean isTrue = "T".equals(sf.getSign().toString());
-            if (!isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo, trueCache)) {
+            if (!isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo)) {
                 return false;
             }
         }
@@ -397,19 +396,18 @@ public class IPLCanonicalStrategyImplementation {
      * intermediate composite ls-formulas at every accessible label.
      *
      * Well-founded: A and B are always strict subformulas of the formula being
-     * checked (lower degree), so the recursion always terminates; results are
-     * memoized per (sign, formula, label) for the scan that is calling this.
+     * checked (lower degree), so the recursion always terminates. Results are memoized
+     * per (sign, formula, label) in the branch's {@link IPLProofTree.Def53Memo},
+     * which keeps a positive answer until a constant is introduced and a negative one
+     * only for the current scan.
      */
     private boolean isCompletelyAnalyzed(boolean isTrue, Formula formula, FormulaLabel label,
             Context ctx, List<SignedFormula> physicalB, Set<FormulaLabel> constantLabels,
-            Map<String, Boolean> memo, Map<String, Boolean> trueCache) {
+            IPLProofTree.Def53Memo memo) {
 
         String key = (isTrue ? "T|" : "F|") + formula + "|" + label;
         Boolean cached = memo.get(key);
         if (cached != null) return cached;
-        // Survives across scans of the same branch until a constant is minted; see
-        // IPLProofTree.getDef53TrueCache for why that is sound.
-        if (trueCache.containsKey(key)) return true;
 
         boolean result;
         if (formula instanceof CompositeFormula && !((CompositeFormula) formula).getImmediateSubformulas().isEmpty()) {
@@ -421,27 +419,27 @@ public class IPLCanonicalStrategyImplementation {
 
             if (isTrue && conn.equals(IPLConnectives.AND)) {
                 result = B != null
-                        && isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo, trueCache)
-                        && isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo, trueCache);
+                        && isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo)
+                        && isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo);
             } else if (!isTrue && conn.equals(IPLConnectives.AND)) {
                 result = B != null
-                        && (isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo, trueCache)
-                            || isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo, trueCache));
+                        && (isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo)
+                            || isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo));
             } else if (isTrue && conn.equals(IPLConnectives.OR)) {
                 result = B != null
-                        && (isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo, trueCache)
-                            || isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo, trueCache));
+                        && (isCompletelyAnalyzed(true, A, label, ctx, physicalB, constantLabels, memo)
+                            || isCompletelyAnalyzed(true, B, label, ctx, physicalB, constantLabels, memo));
             } else if (!isTrue && conn.equals(IPLConnectives.OR)) {
                 result = B != null
-                        && isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo, trueCache)
-                        && isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo, trueCache);
+                        && isCompletelyAnalyzed(false, A, label, ctx, physicalB, constantLabels, memo)
+                        && isCompletelyAnalyzed(false, B, label, ctx, physicalB, constantLabels, memo);
             } else if (isTrue && conn.equals(IPLConnectives.IMPLIES)) {
                 // ∀ cj ∈ Cb, label ⪯ cj : F A:cj c.a. or T B:cj c.a.
                 result = true;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo, trueCache)
-                            && !isCompletelyAnalyzed(true, B, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
+                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo)
+                            && !isCompletelyAnalyzed(true, B, cj, ctx, physicalB, constantLabels, memo)) {
                         result = false;
                         break;
                     }
@@ -451,8 +449,8 @@ public class IPLCanonicalStrategyImplementation {
                 result = false;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo, trueCache)
-                            && isCompletelyAnalyzed(false, B, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
+                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo)
+                            && isCompletelyAnalyzed(false, B, cj, ctx, physicalB, constantLabels, memo)) {
                         result = true;
                         break;
                     }
@@ -462,7 +460,7 @@ public class IPLCanonicalStrategyImplementation {
                 result = true;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
+                    if (!isCompletelyAnalyzed(false, A, cj, ctx, physicalB, constantLabels, memo)) {
                         result = false;
                         break;
                     }
@@ -472,26 +470,31 @@ public class IPLCanonicalStrategyImplementation {
                 result = false;
                 for (FormulaLabel cj : constantLabels) {
                     if (!ctx.isLowerOrEqualTo(label, cj)) continue;
-                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo, trueCache)) {
+                    if (isCompletelyAnalyzed(true, A, cj, ctx, physicalB, constantLabels, memo)) {
                         result = true;
                         break;
                     }
                 }
             } else {
-                // Unknown connective — conservatively consider it analyzed
-                result = true;
+                throw new UnsupportedOperationException(
+                        "Definition 5.3 has no clause for connective " + conn
+                        + ": the implemented rule set is Table 2, over the connectives "
+                        + "~, &, |, ->. Formula: " + formula);
             }
         } else if (formula instanceof CompositeFormula) {
-            // Zeroary composite (TOP/BOTTOM): proof-tree scaffolding outside the
-            // object language, never a genuine subformula — trivially analyzed.
-            result = true;
+            // Zeroary composite: TOP/BOTTOM. They are in the IPL signature but the
+            // implemented rule set has none of the rules that would discharge them
+            // (IPLRuleStructures leaves the top/bottom rule list empty), and answering
+            // "analyzed" here would let a branch carrying T BOTTOM : ci be reported as
+            // completed. Refuse the input instead of guessing.
+            throw new UnsupportedOperationException(
+                    "the implemented rule set (Table 2) does not cover " + formula);
         } else {
             // Base case: propositional variable.
             result = existsMonotoneWitness(isTrue, formula, label, ctx, physicalB);
         }
 
         memo.put(key, result);
-        if (result) trueCache.put(key, Boolean.TRUE);
         return result;
     }
 
@@ -515,6 +518,20 @@ public class IPLCanonicalStrategyImplementation {
             if (related) return true;
         }
         return false;
+    }
+
+    /**
+     * The implementation runs the variable-free system of Table 2 (Appendix A
+     * of the paper), so every label reaching Definition 5.3 must be a constant.
+     * The variable clauses of Definition 5.3 are deliberately not implemented; if a
+     * variable-labelled ls-formula ever showed up, skipping it would silently drop it
+     * from the completeness scan and could report a branch as completed when it is not.
+     */
+    private void requireConstantLabel(LabelledFormula lf) {
+        if (!(lf.getLabel() instanceof ContextFormulaLabel)) {
+            throw new IllegalStateException(
+                    "variable-labelled ls-formula outside the constants-only fragment: " + lf);
+        }
     }
 
     /** Collects the set of constant (ContextFormulaLabel) labels appearing in physicalB. */
@@ -573,8 +590,7 @@ public class IPLCanonicalStrategyImplementation {
         List<SignedFormula> physicalB = null;
         Set<FormulaLabel> constantLabels = null;
         Context ctx = null;
-        Map<String, Boolean> memo = null;
-        Map<String, Boolean> trueCache = null;
+        IPLProofTree.Def53Memo memo = null;
 
         main.proofTree.iterator.IProofTreeVeryBasicIterator it = b.getTopDownIterator();
         while (it.hasNext()) {
@@ -588,20 +604,20 @@ public class IPLCanonicalStrategyImplementation {
             if (!(sf.getFormula() instanceof CompositeFormula)) continue;
             if (!(sf instanceof LabelledFormula)) continue;
             LabelledFormula lf = (LabelledFormula) sf;
-            if (!(lf.getLabel() instanceof ContextFormulaLabel)) continue;
+            if (lf.getLabel() == null) continue;
+            requireConstantLabel(lf);
 
             if (physicalB == null) {
                 physicalB = b.getPhysicalFormulas();
                 constantLabels = collectConstantLabels(physicalB);
                 ctx = firstContext(constantLabels);
-                memo = new HashMap<>();
-                trueCache = b.getDef53TrueCache(ctx);
+                memo = b.getDef53Memo(ctx);
             }
             if (ctx == null) continue; // no constant labels yet — nothing to check
 
             boolean isTrue = "T".equals(sf.getSign().toString());
 
-            if (isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo, trueCache)) {
+            if (isCompletelyAnalyzed(isTrue, sf.getFormula(), lf.getLabel(), ctx, physicalB, constantLabels, memo)) {
                 // Def. 5.3 already satisfied — not a candidate for this scan. Nothing is
                 // recorded on the node: the predicate is re-evaluated from the branch on
                 // every scan, so it can correctly fail again once a new constant appears.

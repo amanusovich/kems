@@ -130,8 +130,8 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
     }
 
     /**
-     * Cross-scan cache of the Definition 5.3 predicate for this branch, holding only the
-     * keys that evaluated to TRUE.
+     * Cross-scan memo of the Definition 5.3 predicate for this branch. Only the positive
+     * half survives between scans.
      *
      * <p>Sound because the predicate is monotone in the branch's formulas as long as Cb
      * does not grow. Every existential clause (T p : cj, F p : ci, F A->B : ci, F ~A : ci)
@@ -141,30 +141,65 @@ public class IPLProofTree extends OptimizedClassicalProofTree {
      * do so when a NEW constant appears. The ordering between constants that already exist
      * never changes either: addRelation is reached only from the getNewFormulaLabel*
      * methods, which always relate a freshly minted label. So a TRUE stays TRUE until the
-     * next constant is minted, which is what {@link #def53Watermark} detects.
+     * next constant is minted, which is what {@link #getDef53Memo} detects.
      *
-     * <p>FALSE results are deliberately not cached: adding a formula can turn them true.
+     * <p>FALSE results, by contrast, are only valid inside one scan: adding a formula can
+     * turn them true, and the procedure adds one on every iteration.
      *
      * <p>Per branch, not shared: a sibling branch has different formulas, so its TRUEs do
      * not transfer. It is not inherited from the parent either, which is only a missed
      * optimisation, never a source of wrong answers.
      */
-    private final java.util.Map<String, Boolean> def53TrueCache = new java.util.HashMap<>();
-    private int def53Watermark = -1;
+    private final Def53Memo def53Memo = new Def53Memo();
 
     /**
-     * Returns this branch's Definition 5.3 TRUE-cache, cleared first if a constant has been
-     * minted since it was last used. The label count of the shared Context is a
-     * conservative witness: it only grows, and it grows exactly when some branch mints a
-     * constant, so this may clear more often than strictly needed but never less.
+     * Memo of Definition 5.3 results for one branch, keyed by the (sign, formula, label)
+     * triple the predicate is asked about. Positive and negative results have different
+     * lifetimes, which is the whole content of this class:
+     *
+     * <ul>
+     *   <li>a TRUE stays valid until a constant is introduced (see above);</li>
+     *   <li>a FALSE is valid only within the scan that computed it, since any ls-formula
+     *       appended to the branch can turn it true.</li>
+     * </ul>
+     *
+     * {@link #beginScan} applies both rules at once: it drops the negative entries
+     * unconditionally, and the positive ones only when the constant count has moved.
      */
-    public java.util.Map<String, Boolean> getDef53TrueCache(Context ctx) {
-        int now = ctx.getLabels().size();
-        if (now != def53Watermark) {
-            def53TrueCache.clear();
-            def53Watermark = now;
+    public static final class Def53Memo {
+        private final java.util.Set<String> analyzed = new java.util.HashSet<>();
+        private final java.util.Set<String> notAnalyzed = new java.util.HashSet<>();
+        private int constantsAtLastScan = -1;
+
+        void beginScan(int constantCount) {
+            if (constantCount != constantsAtLastScan) {
+                analyzed.clear();
+                constantsAtLastScan = constantCount;
+            }
+            notAnalyzed.clear();
         }
-        return def53TrueCache;
+
+        /** TRUE, FALSE, or null when the triple has not been decided yet. */
+        public Boolean get(String key) {
+            if (analyzed.contains(key)) return Boolean.TRUE;
+            if (notAnalyzed.contains(key)) return Boolean.FALSE;
+            return null;
+        }
+
+        public void put(String key, boolean result) {
+            (result ? analyzed : notAnalyzed).add(key);
+        }
+    }
+
+    /**
+     * Returns this branch's Definition 5.3 memo, ready for a new scan. The label count of
+     * the shared Context is a conservative witness that a constant was introduced: it only
+     * grows, and it grows exactly when some branch introduces one, so the positive entries
+     * may be dropped more often than strictly needed but never less often.
+     */
+    public Def53Memo getDef53Memo(Context ctx) {
+        def53Memo.beginScan(ctx == null ? -1 : ctx.getLabels().size());
+        return def53Memo;
     }
 
     private void recordRinstancesSnapshot(SignedFormulaNode node) {
