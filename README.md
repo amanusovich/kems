@@ -1,5 +1,15 @@
 This is the README file for KEMS, a KE-based multi-strategy tableau prover.
 
+IPL prover (branch ipl-final-am)
+--------------------------------
+This branch adds a prover for intuitionistic propositional logic implementing the
+constants-only labelled KE system of Solares-Rojas, Baldi and Rodriguez, "Labelled KE
+for intuitionistic propositional logic", J. Logic Comput. 36(6), 2026. The IPL code is
+under kems.prover/src/{logicalSystems,main/newstrategy,rules}/ipl; the ILTP v1.1.2
+propositional library is under kems.prover/tests/resources/iltp; the benchmark harness,
+scripts and per-problem results reported in the LANMR 2026 paper are in benchmarks/
+(see benchmarks/README.md). A web demo runs at https://kems-ipl.fly.dev/ (Dockerfile).
+
 More info about KEMS can be found in http://adolfoneto.wikidot.com/KEMS
 
 Publications:
