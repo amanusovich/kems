@@ -12,6 +12,7 @@ import logic.problem.Problem;
 import logic.signedFormulas.SignedFormulaCreator;
 import main.newstrategy.ISimpleStrategy;
 import main.newstrategy.Prover;
+import main.newstrategy.ipl.IPLTracer;
 import main.proofTree.IProofTree;
 import main.strategy.NullClosedProofTree;
 import main.tableau.Method;
@@ -113,7 +114,7 @@ public class ProverFacade {
 						.getRulesStructureName()));
 
 		// creating a strategy
-		ISimpleStrategy s = createStrategy(proverConfiguration, method);
+		ISimpleStrategy s = createStrategy(proverConfiguration, method, problem);
 
 		// creating and configuring a prover
 		Prover prover = new Prover();
@@ -124,6 +125,11 @@ public class ProverFacade {
 		if (logger.isDebugEnabled()) {
 			logger.debug("Starting proof procedure at "
 					+ new Time(System.currentTimeMillis()));
+		}
+
+		if (s instanceof main.newstrategy.ipl.IPLSimpleStrategy) {
+			IPLTracer.setEnabled(true);
+			IPLTracer.getInstance().reset();
 		}
 
 		long begin, interval = 0;
@@ -318,7 +324,7 @@ public class ProverFacade {
 	 * @return
 	 */
 	private ISimpleStrategy createStrategy(
-			ProverConfiguration proverConfiguration, Method method)
+			ProverConfiguration proverConfiguration, Method method, Problem problem)
 			throws Exception {
 
 		ISimpleStrategy strategy;
@@ -357,6 +363,13 @@ public class ProverFacade {
 
 		strategy
 				.setComparator(proverConfiguration.getSignedFormulaComparator());
+
+		// For IPL, pass the Problem's Context to the Strategy
+		// if (strategy instanceof main.newstrategy.ipl.IPLSimpleStrategy &&
+		// 	problem != null && problem.hasIPLContext()) {
+		// 	((main.newstrategy.ipl.IPLSimpleStrategy) strategy).setIPLContext(problem.getIPLContext());
+		// 	System.out.println("IPL: Problem Context injected into Strategy");
+		// }
 
 		// if (strategy instanceof ConfigurableSimpleStrategy) {
 		// ((ConfigurableSimpleStrategy) strategy)
@@ -427,8 +440,9 @@ public class ProverFacade {
 
 	private SignedFormulaCreator instantiateSignedFormulaCreator(
 			ProverConfiguration proverConfiguration) {
-		return new SignedFormulaCreator(proverConfiguration
-				.getFirstParsingLibName());
+		String parsingLibName = proverConfiguration.getFirstParsingLibName();
+		
+		return new SignedFormulaCreator(parsingLibName);
 	}
 
 	public SignedFormulaCreator getSignedFormulaCreator() {

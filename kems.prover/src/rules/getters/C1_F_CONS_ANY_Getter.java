@@ -39,4 +39,5 @@ public class C1_F_CONS_ANY_Getter implements KESignedFormulaGetter {
 		return not__f_and_not_f;
 	}
 
+
 }

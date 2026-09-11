@@ -42,4 +42,5 @@ public class TrueBottomGetter implements KESignedFormulaGetter {
 						ff.createCompositeFormula(ClassicalConnectives.BOTTOM));
 	}
 
+
 }

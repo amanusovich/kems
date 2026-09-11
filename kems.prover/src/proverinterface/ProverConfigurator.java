@@ -149,11 +149,12 @@ public class ProverConfigurator extends JFrame implements ActionListener {
 			.getName() };
 
 	private static final String[] IPL_STRATEGY_NAMES = new String[] {
-			SimpleStrategy.class.getName(),
+			"main.newstrategy.ipl.IPLSimpleStrategy",
+			"main.newstrategy.ipl.IPLImmediatePBStrategy",
 	};
 
-	private static final String[] LOGIC_NAMES = new String[] { IPL_LOGIC, CPL_LOGIC };
-//			MBC_LOGIC, MCI_LOGIC, C1_LOGIC, IPL_LOGIC };
+	private static final String[] LOGIC_NAMES = new String[] { 
+			IPL_LOGIC, CPL_LOGIC, MBC_LOGIC, MCI_LOGIC, C1_LOGIC };
 
 	private final Map<String, String> strategyMap;
 
@@ -332,7 +333,8 @@ public class ProverConfigurator extends JFrame implements ActionListener {
 
 	private void createRuleStructureChooser() {
 		rulesStructureNameCombo = new JComboBox(
-				new String[] { RuleStructureFactory.CPL_NORMAL_BX,
+				new String[] { RuleStructureFactory.IPL,
+						RuleStructureFactory.CPL_NORMAL_BX,
 						RuleStructureFactory.MBC, RuleStructureFactory.MCI,
 						RuleStructureFactory.CPL_CONFIGURABLE,
 						RuleStructureFactory.C1 });
@@ -621,6 +623,10 @@ public class ProverConfigurator extends JFrame implements ActionListener {
 				getSimpleNames(CPL_STRATEGY_NAMES)));
 		rulesStructureNameCombo
 				.setSelectedItem(RuleStructureFactory.CPL_CONFIGURABLE);
+	}
+
+	public boolean isIPL() {
+		return IPL_LOGIC.equals(logicNameCombo.getSelectedItem());
 	}
 
 	private void setIPLAsCurrentLogicOption() {

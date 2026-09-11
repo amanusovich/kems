@@ -9,7 +9,8 @@
 package ipl;
 import logic.formulas.*;
 import logic.signedFormulas.*;
-import logicalSystems.classicalLogic.*;
+import logic.labelledFormulas.*;
+import logicalSystems.ipl.*;
 import logic.problem.*;
 import java.util.*;
 import java_cup.runtime.*;
@@ -49,11 +50,11 @@ action code {:
 	public Formula createNary (FormulaFactory ff, String operator, List l){
    		Connective connective;
    		if (operator.equals("And")){
-   			connective = ClassicalConnectives.AND;
+   			connective = IPLConnectives.AND;
    		} else if (operator.equals("Or")){
-   			connective = ClassicalConnectives.OR;
+   			connective = IPLConnectives.OR;
    		} else if (operator.equals("Xor")){
-   			connective = ClassicalConnectives.XOR;
+   			connective = IPLConnectives.XOR;
    		} else {
 				return null;
    		}
@@ -76,17 +77,17 @@ action code {:
    		Connective connective;
 
    		if (operator.equals("And")){
-   			connective = ClassicalConnectives.AND;
+   			connective = IPLConnectives.AND;
    		} else if (operator.equals("Or")){
-   			connective = ClassicalConnectives.OR;
+   			connective = IPLConnectives.OR;
    		} else if (operator.equals("Xor")){
-   			connective = ClassicalConnectives.XOR;
+   			connective = IPLConnectives.XOR;
    		} else if (operator.equals("Implies")){
-   			connective = ClassicalConnectives.IMPLIES;
+   			connective = IPLConnectives.IMPLIES;
    		} else if (operator.equals("Biimplies")){
-   			connective = ClassicalConnectives.BIIMPLIES;
+   			connective = IPLConnectives.BIIMPLIES;
    		} else { // Error
-   			connective = ClassicalConnectives.IMPLIES;
+   			connective = IPLConnectives.IMPLIES;
  			System.exit(1);
    		}
 
@@ -96,15 +97,15 @@ action code {:
 		return result;
     }
 
-	public SignedFormula createSignedFormula (SignedFormulaFactory sff,String sign, Formula f, String label) {
+	public LabelledFormula createLabelledFormula (String sign, Formula f, String label) {
     	FormulaSign fs;
 
     	if (sign.equals("T")){
-    		fs = ClassicalSigns.TRUE;
+    		fs = IPLSigns.TRUE;
     	} else if (sign.equals("F")){
-    		fs = ClassicalSigns.FALSE;
+    		fs = IPLSigns.FALSE;
     	} else { 	// Error
-            fs = ClassicalSigns.FALSE;
+            fs = IPLSigns.FALSE;
             System.exit(1);
     	}
 
@@ -120,7 +121,8 @@ action code {:
             System.exit(1);
         }
 
-		return sff.createSignedFormula (fs, f, fl);
+		SignedFormula sf = sff.createSignedFormula(fs, f, fl);
+		return new LabelledFormula(fl, sf);
     }
 
 :};
@@ -132,7 +134,7 @@ terminal String    STRING, SIGN, LABEL;
 non terminal end;
 non terminal Problem 		    file;
 non terminal Formula   			formula, term;
-non terminal SignedFormula  	signed_formula;
+non terminal LabelledFormula  	signed_formula;
 non terminal SignedFormulaList  formula_list;
 non terminal List      			listOfFormulas;
 non terminal String    			oper;
@@ -168,7 +170,7 @@ non terminal String    			oper;
 
    signed_formula ::= SIGN:s formula:f LABEL:l end
                  {:
-                 	RESULT = createSignedFormula (sff, s, f, l);
+                 	RESULT = createLabelledFormula (s, f, l);
                  :};
 
    end ::= EOL | ;
@@ -195,26 +197,26 @@ non terminal String    			oper;
                  {:
                  	if (o == "And"){
                  		RESULT = ff.createCompositeFormula (
-                 					ClassicalConnectives.TOP);
+                 					IPLConnectives.TOP);
                  	} // this one is for Or - no other option for other connectives
                  	else {
-                 		RESULT = ff.createCompositeFormula (ClassicalConnectives.BOTTOM);
+                 		RESULT = ff.createCompositeFormula (IPLConnectives.BOTTOM);
                  	}
                  :}
            |
            NEG LPAREN formula:f RPAREN
                  {:
-                 	RESULT = ff.createCompositeFormula(ClassicalConnectives.NOT, f );
+                 	RESULT = ff.createCompositeFormula(IPLConnectives.NOT, f );
                  :}
            |
            CONSISTENCY LPAREN formula:f RPAREN
                  {:
-                 	RESULT = ff.createCompositeFormula(ClassicalConnectives.TOP);
+                 	RESULT = ff.createCompositeFormula(IPLConnectives.TOP);
                  :}
            |
            INCONSISTENCY LPAREN formula:f RPAREN
                  {:
-                 	RESULT = ff.createCompositeFormula(ClassicalConnectives.BOTTOM);
+                 	RESULT = ff.createCompositeFormula(IPLConnectives.BOTTOM);
                  :}
            |
            term:t
@@ -249,26 +251,26 @@ non terminal String    			oper;
 		|
 		NEG STRING:n
                  {:
-                 	RESULT = ff.createCompositeFormula(ClassicalConnectives.NOT,
+                 	RESULT = ff.createCompositeFormula(IPLConnectives.NOT,
                  						  ff.createAtomicFormula(n) );
                   :}
         |
 		CONSISTENCY STRING:n
                  {:
-		               RESULT = ff.createCompositeFormula(ClassicalConnectives.TOP);
+		               RESULT = ff.createCompositeFormula(IPLConnectives.TOP);
                   :}
 		  |
 		INCONSISTENCY STRING:n
                  {:
-        		       RESULT = ff.createCompositeFormula(ClassicalConnectives.BOTTOM);
+        		       RESULT = ff.createCompositeFormula(IPLConnectives.BOTTOM);
                   :}
 		 | TOP
 		 {:
-		       RESULT = ff.createCompositeFormula(ClassicalConnectives.TOP);
+		       RESULT = ff.createCompositeFormula(IPLConnectives.TOP);
 		 :}
 		 | BOTTOM
 		 {:
-		       RESULT = ff.createCompositeFormula(ClassicalConnectives.BOTTOM);
+		       RESULT = ff.createCompositeFormula(IPLConnectives.BOTTOM);
 		 :};
    		oper ::= AND
                  {:

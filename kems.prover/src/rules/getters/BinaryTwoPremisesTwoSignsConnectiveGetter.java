@@ -66,6 +66,8 @@ public class BinaryTwoPremisesTwoSignsConnectiveGetter implements
 
     }
 
+
+
 //    /*
 //     * (non-Javadoc)
 //     * 

@@ -4,11 +4,16 @@
  */
 package logic.signedFormulas;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import logic.formulas.FormulaFactory;
 import logic.problem.Problem;
 import parsers.ParserUser;
-import ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer;
-import ConversorWagnerSATLIB.ConversorWagnerSATLIBParser;
+// import ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer;
+// import ConversorWagnerSATLIB.ConversorWagnerSATLIBParser;
+import logicalSystems.ipl.IPLSignedFormulaFactory;
+
 
 /**
  * Class that allows the creation of formulas from strings (using Wagner Dias's
@@ -19,12 +24,10 @@ public class SignedFormulaCreator {
 
 	/** conversor wagner lexer and parser class names * */
 	// "ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer";
-	private static final String CW_LEXER = ConversorWagnerSATLIBLexer.class
-			.getCanonicalName();
+	private static final String CW_LEXER = "ConversorWagnerSATLIB.ConversorWagnerSATLIBLexer";
 
 	// "ConversorWagnerSATLIB.ConversorWagnerSATLIBParser";
-	private static final String CW_PARSER = ConversorWagnerSATLIBParser.class
-			.getCanonicalName();
+	private static final String CW_PARSER = "ConversorWagnerSATLIB.ConversorWagnerSATLIBParser";
 
 	private SignedFormulaFactory _sff;
 
@@ -42,7 +45,12 @@ public class SignedFormulaCreator {
 	 * @param packageName
 	 */
 	public SignedFormulaCreator(String packageName) {
-		_sff = new SignedFormulaFactory();
+		// For IPL, use IPLSignedFormulaFactory, which handles ContextFormulaLabel
+		if ("ipl".equals(packageName)) {
+			_sff = new IPLSignedFormulaFactory();
+		} else {
+			_sff = new SignedFormulaFactory();
+		}
 		_ff = new FormulaFactory();
 		_packageName = packageName;
 	}
@@ -71,10 +79,20 @@ public class SignedFormulaCreator {
 		}
 
 		ParserUser pu2 = new ParserUser();
-		_problem = (Problem) pu2.parseString(_packageName + "." + _packageName
-				+ "Lexer", _packageName + "." + _packageName + "Parser", s);
+		_problem = (Problem) pu2.parseString(
+			_packageName + "." + _packageName + "Lexer",
+			_packageName + "." + _packageName + "Parser",
+			s
+		);
 
+		// Clone formulas from the parser's factory into our factory
+		// For IPL: IPLSignedFormulaFactory.cloneAll() automatically converts to ContextFormulaLabel
+		// For other logics: SignedFormulaFactory.cloneAll() copies normally
 		_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+		
+		if ("ipl".equals(_packageName)) {
+			cloneIPLContext();
+		}
 
 		return _problem;
 	}
@@ -106,14 +124,29 @@ public class SignedFormulaCreator {
 			_problem = (Problem) pu2.parseString(_packageName + "."
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", s);
+			
+			// Clone formulas from the parser's factory into our factory
+			// For IPL: IPLSignedFormulaFactory.cloneAll() automatically converts to ContextFormulaLabel
+			// For other logics: SignedFormulaFactory.cloneAll() copies normally
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			
+			if ("ipl".equals(_packageName)) {
+				cloneIPLContext();
+			}
 		} else {
 			ParserUser pu2 = new ParserUser();
 			_problem = (Problem) pu2.parseFile(_packageName + "."
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", completeFilename);
 
+			// Clone formulas from the parser's factory into our factory
+			// For IPL: IPLSignedFormulaFactory.cloneAll() automatically converts to ContextFormulaLabel
+			// For other logics: SignedFormulaFactory.cloneAll() copies normally
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
+			
+			if ("ipl".equals(_packageName)) {
+				cloneIPLContext();
+			}
 		}
 
 		_problem.setFilename(completeFilename);
@@ -131,4 +164,31 @@ public class SignedFormulaCreator {
 		return _ff;
 	}
 
+	private void cloneIPLContext() {
+		if (_sff instanceof IPLSignedFormulaFactory) {
+			IPLSignedFormulaFactory iplFactory = (IPLSignedFormulaFactory) _sff;
+			_problem.setIPLContext(iplFactory.getContext());
+			_problem.setSignedFormulaFactory(iplFactory);
+
+			// Replace problem formulas with their ContextFormulaLabel versions.
+			// The parser populates Problem.getFormulas() with plain FormulaLabel instances.
+			// cloneAll() converts them to ContextFormulaLabel in the factory map, but
+			// Problem.getFormulas() is not updated. Without this replacement, fillWith()
+			// adds plain-FormulaLabel formulas to the proof tree, and when rules later
+			// call FormulaLabel.getGreaterFormulaLabel() they get a plain label with no
+			// context, so the relation c0 <= c1 (and any relation from an initial
+			// formula's label) is never registered in the Context.
+			SignedFormulaList formulasList = _problem.getFormulas();
+			List<SignedFormula> originals = new ArrayList<>(formulasList.getList());
+			while (formulasList.size() > 0) {
+				formulasList.remove(0);
+			}
+			Map<String, SignedFormula> iplMap = iplFactory.getSignedFormulas();
+			for (SignedFormula sf : originals) {
+				SignedFormula iplVersion = iplMap.get(sf.toString());
+				formulasList.add(iplVersion != null ? iplVersion : sf);
+			}
+		}
+	}
+	
 }

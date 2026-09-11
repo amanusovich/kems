@@ -11,6 +11,9 @@ import logic.logicalSystem.ILogicalSystem;
 import logicalSystems.classicalLogic.ClassicalLogicSystem;
 import logicalSystems.classicalLogic.ClassicalRulesStructureBuilder;
 import logicalSystems.classicalLogic.ClassicalSignatureFactory;
+import logicalSystems.ipl.IPLLogicSystem;
+import logicalSystems.ipl.IPLRulesStructureBuilder;
+import logicalSystems.ipl.IPLSignatureFactory;
 
 /**
  * A factory of logical system objects. It is a singleton.
@@ -22,10 +25,12 @@ import logicalSystems.classicalLogic.ClassicalSignatureFactory;
 public class LogicalSystemFactory {
     /** constants for logical systems */
     public static final Object CLASSICAL_LOGIC = new Object();
+    public static final Object IPL_LOGIC = new Object();
 
     private static LogicalSystemFactory __logicalSystemFactory;
 
     private ClassicalSignatureFactory classicalSignatureFactory;
+    private IPLSignatureFactory iplSignatureFactory;
 
     private Map<Object,ILogicalSystem> logicalSystemsMap;
 
@@ -59,6 +64,16 @@ public class LogicalSystemFactory {
                 return ils;
             } else
                 return (ILogicalSystem) logicalSystemsMap.get(CLASSICAL_LOGIC);
+        } else if (id == IPL_LOGIC) {
+            if (logicalSystemsMap.get(IPL_LOGIC) == null) {
+                this.iplSignatureFactory = IPLSignatureFactory.getInstance();
+                ILogicalSystem ils = new IPLLogicSystem(
+                        iplSignatureFactory.getNormalSignature(),
+                        new IPLRulesStructureBuilder());
+                logicalSystemsMap.put(IPL_LOGIC, ils);
+                return ils;
+            } else
+                return (ILogicalSystem) logicalSystemsMap.get(IPL_LOGIC);
         }
 
         return null;

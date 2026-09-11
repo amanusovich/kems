@@ -116,4 +116,5 @@ public class SubformulaConnectiveForTestRoleGetter implements KESignedFormulaGet
     }
 
 
+
 }

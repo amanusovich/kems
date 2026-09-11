@@ -263,7 +263,8 @@ public class ProofVerifier {
 			} else {
 
 				if ((origin == NamedOrigin.DEFINITION) || (origin == NamedOrigin.PROBLEM)
-						|| (origin == NamedOrigin.BACKJUMPING) || (origin == NamedOrigin.LEARNING)) {
+						|| (origin == NamedOrigin.BACKJUMPING) || (origin == NamedOrigin.LEARNING)
+						|| (origin == NamedOrigin.PROPAGATION)) {
 					setNodeVerified(en, true, ORIGIN_OR_PROBLEM_NODE);
 				} else {
 					SignedFormulaNodeOrigin sforigin = (SignedFormulaNodeOrigin) origin;

@@ -1,0 +1,39 @@
+# fly.toml — Fly.io configuration for the IPL KE-tableau web server.
+# Generated for thesis demo; tune resources as needed.
+#
+# Quickstart:
+#   flyctl auth login
+#   flyctl launch --no-deploy --name kems-ipl   # only the first time
+#   flyctl deploy
+#
+# The app exposes a single HTTPS endpoint on port 8080; Fly's edge
+# terminates TLS and forwards to the container.
+
+app = "kems-ipl"
+primary_region = "gru"          # São Paulo, the active LATAM region
+                                # (Santiago/scl was deprecated by Fly in 2025).
+                                # Change with `flyctl regions set <code>`.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"   # save free-tier hours when idle
+  auto_start_machines = true
+  min_machines_running = 0      # cold-start is acceptable for a demo
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 4
+    hard_limit = 8              # prover is CPU-heavy; keep concurrency low
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "2gb"                # Long PB generates ~49 MB of HTML in-memory;
+                                # 512 MB OOMed. 2 GB leaves comfortable headroom.
+
+[env]
+  PORT = "8080"

@@ -17,5 +17,7 @@ public interface KESignedFormulaGetter {
 	
 	public SignedFormula getSignedFormula (SignedFormulaFactory sff, FormulaFactory ff, SignedFormulaList sfl);
 
+	//public LabelledFormula getLabelledFormula (SignedFormulaFactory sff, FormulaFactory ff, LabelledFormulaList sfl);
+
 
 }

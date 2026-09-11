@@ -1,0 +1,25 @@
+## Keep Docker context minimal: ship only the source tree and the runtime jars
+## that the build stage in the Dockerfile actually consumes.
+
+# Everything by default; allow-list specific paths below.
+*
+!Dockerfile
+!.dockerignore
+
+# Source we need to compile inside the image.
+!kems.prover
+kems.prover/bin
+kems.prover/output
+kems.prover/tests
+kems.prover/**/*.log
+
+# Bundled third-party / generated jars referenced by the IntelliJ modules.
+!kems.export
+kems.export/*
+!kems.export/lib
+kems.export/lib/*
+!kems.export/lib/ext
+!kems.export/lib/generated
+
+# Anything else in the repo (paper, PDFs, old code, etc.) is excluded
+# implicitly because the wildcard above kept it out unless re-added here.

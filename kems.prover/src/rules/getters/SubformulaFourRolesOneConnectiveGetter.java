@@ -74,4 +74,6 @@ public class SubformulaFourRolesOneConnectiveGetter implements
                         substituted, replacement));
     }
 
+
+
 }

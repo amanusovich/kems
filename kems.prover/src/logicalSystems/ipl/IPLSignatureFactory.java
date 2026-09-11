@@ -12,7 +12,9 @@ import logic.logicalSystem.Signature;
  */
 public class IPLSignatureFactory {
 
-    public static ConnectiveCode TOP = new ConnectiveCode();
+    // TODO: test what happens if TOP and BOTTOM are removed
+
+    public static ConnectiveCode TOP = new ConnectiveCode(); 
 
     public static ConnectiveCode BOTTOM = new ConnectiveCode();
 

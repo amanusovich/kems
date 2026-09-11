@@ -15,6 +15,7 @@ import main.newstrategy.simple.SimpleStrategy;
 import main.newstrategy.simple.backjumping.BackjumpingSimpleStrategy;
 import main.newstrategy.simple.learning.LearningSimpleStrategy;
 import main.newstrategy.simple.newlearning.NewLearningSimpleStrategy;
+import main.newstrategy.ipl.IPLSimpleStrategy;
 import proverinterface.RuleStructureFactory;
 
 
@@ -40,6 +41,8 @@ public class RuleStructureMap {
 		ruleStructureMap.put(MCISimpleWithOptionalRulesStrategy.class.getSimpleName(),RuleStructureFactory.MCI);
 
 		ruleStructureMap.put(C1SimpleStrategy.class.getSimpleName(),RuleStructureFactory.C1);
+		
+		ruleStructureMap.put(IPLSimpleStrategy.class.getSimpleName(),RuleStructureFactory.IPL);
 
 	}
 

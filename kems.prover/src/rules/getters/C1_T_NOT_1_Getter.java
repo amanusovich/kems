@@ -21,4 +21,5 @@ public class C1_T_NOT_1_Getter implements KESignedFormulaGetter {
 		return sff.createSignedFormula(_sign, C1_Sign_T_NOT_1_Pattern
 				.getFormulaOfConsistency(sfl.get(0).getFormula()));
 	}
+
 }

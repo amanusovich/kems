@@ -29,7 +29,7 @@ else
   PS=":"
 fi
 
-LOCALCLASSPATH=${PS}$KEMS_HOME/kems.bin/lib/ant.jar${PS}$KEMS_HOME/kems.bin/lib/optional.jar${PS}
+LOCALCLASSPATH=$KEMS_HOME/kems.prover/bin${PS}$KEMS_HOME/kems.bin/lib/ant.jar${PS}$KEMS_HOME/kems.bin/lib/optional.jar${PS}
 ANT_HOME=$KEMS_HOME/kems.bin/lib
 
 echo Building with classpath $LOCALCLASSPATH
@@ -38,4 +38,4 @@ echo
 echo Starting Ant...
 echo
 
-$JAVA_HOME_KEMS -Dant.home=$ANT_HOME -classpath $LOCALCLASSPATH${PS} org.apache.tools.ant.Main $*
+$JAVA_HOME_KEMS/bin/java -Dant.home=$ANT_HOME -classpath $LOCALCLASSPATH${PS} org.apache.tools.ant.Main $*

@@ -51,4 +51,6 @@ public class BinaryConnectiveConnectiveGetter implements KESignedFormulaGetter {
                 _connective, ((Formula) (_role.getFormulas(sfl.get(0)
                         .getFormula())).get(0))));
     }
+
+
 }

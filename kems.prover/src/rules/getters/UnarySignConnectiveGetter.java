@@ -54,4 +54,5 @@ public class UnarySignConnectiveGetter implements KESignedFormulaGetter {
                 _connective, (Formula) sfl.get(0).getFormula()));
     }
 
+
 }

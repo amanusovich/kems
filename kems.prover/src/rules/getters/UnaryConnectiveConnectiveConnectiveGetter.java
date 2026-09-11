@@ -68,4 +68,6 @@ public class UnaryConnectiveConnectiveConnectiveGetter implements KESignedFormul
                 (Formula) firstFormula.getImmediateSubformulas().get(0)));
     }
 
+
+
 }

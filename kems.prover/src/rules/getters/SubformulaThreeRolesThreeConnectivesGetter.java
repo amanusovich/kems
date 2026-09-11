@@ -99,4 +99,6 @@ public class SubformulaThreeRolesThreeConnectivesGetter implements KESignedFormu
                         substituted, replacement));
     }
 
+
+
 }

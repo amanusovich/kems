@@ -85,4 +85,5 @@ public class SimpleSubformulaGetter implements KESignedFormulaGetter, Subformula
     }
 
 
+
 }

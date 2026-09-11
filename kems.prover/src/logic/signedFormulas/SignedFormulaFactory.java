@@ -12,6 +12,7 @@ import java.util.TreeMap;
 
 import logic.formulas.Formula;
 import logic.formulas.FormulaFactory;
+import logic.labelledFormulas.FormulaLabel;
 import proverinterface.proofviewer.CloseSignedFormula;
 
 /**
@@ -24,7 +25,7 @@ public class SignedFormulaFactory {
 
     Map<String, SignedFormula> _signedFormulas;
 
-    SignedFormula _lastSignedFormulaAdded = null;
+    protected SignedFormula _lastSignedFormulaAdded = null;
 
     public SignedFormulaFactory() {
         _signedFormulas = new TreeMap<String, SignedFormula>();
@@ -52,7 +53,7 @@ public class SignedFormulaFactory {
 
         SignedFormula sf;
         _signedFormulas.put(SignedFormula.toString(sign, formula, formulaLabel),
-        sf = new SignedFormula(sign, formula));
+        sf = new SignedFormula(sign, formula, formulaLabel));
 
         _lastSignedFormulaAdded = sf;
 

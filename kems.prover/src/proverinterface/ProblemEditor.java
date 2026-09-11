@@ -63,6 +63,9 @@ public class ProblemEditor extends JFrame implements ActionListener, WindowListe
 
 	public static final String CURRENT_PROBLEM = "problem description in Problem Editor window";
 
+	// IPL preset formulas live in {@link proverinterface.webserver.IPLExamplesProvider}
+	// so the Swing GUI and the web server share a single source of truth.
+
 	private File editingFile;
 
 	private JMenuItem saveMenuItem;
@@ -162,6 +165,24 @@ public class ProblemEditor extends JFrame implements ActionListener, WindowListe
 		runMenu.add(runMenuItem);
 
 		menuBar.add(runMenu);
+
+		JMenu iplMenu = new JMenu("IPL Examples");
+		iplMenu.setMnemonic(KeyEvent.VK_I);
+		for (proverinterface.webserver.IPLExamplesProvider.Example ex
+				: proverinterface.webserver.IPLExamplesProvider.getExamples()) {
+			JMenuItem item = new JMenuItem(ex.name);
+			item.setToolTipText(ex.validity + " | " + ex.formula);
+			final String formulaText = ex.formula;
+			item.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent ev) {
+					editorPane.setText(formulaText);
+					editorPane.repaint();
+					proverConfigurator.openProofViewerForString(formulaText);
+				}
+			});
+			iplMenu.add(item);
+		}
+		menuBar.add(iplMenu);
 
 		// having finished menu, sets menu bar
 		setJMenuBar(menuBar);

@@ -44,6 +44,12 @@ public class TwoPremisesOneConclusionRule extends OneConclusionRule {
 			return null;
 	}
 
+
+	
+
+
+	
+	
 	/**
 	 * @param sff
 	 * @param ff

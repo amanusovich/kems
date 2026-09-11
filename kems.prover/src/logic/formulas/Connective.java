@@ -73,10 +73,10 @@ public class Connective {
 	 * @see java.lang.Object#equals(java.lang.Object)
 	 */
 	public boolean equals(Object obj) {
-		//		if (_symbol.equals(((Connective)obj).getSymbol())){
-		//		System.err.println(obj.hashCode() + " " + this.hashCode() );
-		//		}
-		//	return _symbol.equals(((Connective)obj).getSymbol()) ;
-		return this == obj;
+//		if (_symbol.equals(((Connective)obj).getSymbol())){
+//			System.err.println(obj.hashCode() + " " + this.hashCode() );
+//		}
+		return _symbol.equals(((Connective)obj).getSymbol()) ;
+		//return this == obj;
 	}
 }

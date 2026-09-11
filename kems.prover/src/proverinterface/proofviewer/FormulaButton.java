@@ -13,6 +13,8 @@ import javax.swing.JButton;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 
+import logic.labelledFormulas.LabelledFormula;
+import logic.signedFormulas.SignedFormula;
 import main.proofTree.SignedFormulaNode;
 import main.proofTree.origin.SignedFormulaNodeOrigin;
 
@@ -45,6 +47,41 @@ public class FormulaButton extends JButton implements MouseListener {
 			popup.add(new JMenuItem(v.get(i).toString()));
 		}
 		this.addMouseListener(this);
+
+		String tooltip = buildIPLTooltip(sfn);
+		if (tooltip != null) {
+			setToolTipText(tooltip);
+		}
+	}
+
+	private static String buildIPLTooltip(SignedFormulaNode sfn) {
+		SignedFormula sf = (SignedFormula) sfn.getContent();
+		if (!(sf instanceof LabelledFormula)) return null;
+
+		LabelledFormula lf = (LabelledFormula) sf;
+		StringBuilder sb = new StringBuilder("<html>");
+		sb.append("<b>").append(sf.toString()).append("</b><br/>");
+		sb.append("Label: ").append(lf.getLabel()).append("<br/>");
+		sb.append("Sign: ").append(sf.getSign()).append("<br/>");
+
+		if (sfn.getOrigin() instanceof SignedFormulaNodeOrigin) {
+			SignedFormulaNodeOrigin origin = (SignedFormulaNodeOrigin) sfn.getOrigin();
+			sb.append("Rule: <b>").append(origin.getRule()).append("</b><br/>");
+			if (origin.getMain() != null) {
+				sb.append("Main premise: ").append(origin.getMain().getContent()).append("<br/>");
+			}
+			if (origin.getAuxiliaries() != null && !origin.getAuxiliaries().isEmpty()) {
+				for (SignedFormulaNode aux : origin.getAuxiliaries()) {
+					sb.append("Aux premise: ").append(aux.getContent()).append("<br/>");
+				}
+			}
+		} else if (sfn.getOrigin() != null) {
+			sb.append("Origin: ").append(sfn.getOrigin().getName()).append("<br/>");
+		} else {
+			sb.append("Origin: (propagated)<br/>");
+		}
+		sb.append("</html>");
+		return sb.toString();
 	}
 
 	public void mousePressed(MouseEvent e) {
@@ -73,7 +110,7 @@ public class FormulaButton extends JButton implements MouseListener {
 	public static Vector<String> createStringArray(SignedFormulaNode sfn, int maxLength) {
 		Vector<String> result = new Vector<String>();
 		result.add(formatStringHtml(sfn.getContent().toString(), maxLength));
-		result.add(sfn.getOrigin().getName());
+		result.add(sfn.getOrigin() != null ? sfn.getOrigin().getName() : "(propagated)");
 		if (sfn.getOrigin() instanceof SignedFormulaNodeOrigin && (sfn.getOrigin()).getMain() != null) {
 			result.add(formatStringHtml(((SignedFormulaNodeOrigin) sfn.getOrigin()).toStringMain(),
 					maxLength));

@@ -98,4 +98,5 @@ public class SubformulaThreeRolesGetter implements KESignedFormulaGetter , Subfo
                         substituted, replacement));
     }
 
+
 }

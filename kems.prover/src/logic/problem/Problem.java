@@ -5,6 +5,7 @@
 package logic.problem;
 
 import logic.formulas.FormulaFactory;
+import logic.labelledFormulas.Context;
 import logic.signedFormulas.SignedFormulaCreator;
 import logic.signedFormulas.SignedFormulaFactory;
 import logic.signedFormulas.SignedFormulaList;
@@ -32,6 +33,8 @@ public class Problem {
     private ProblemType _type;
 
     private SignedFormulaCreator signedFormulaCreator;
+
+    private Context iplContext;
 
     /**
      * Creates a problem in a given format.
@@ -192,5 +195,28 @@ public class Problem {
 
     public void setSignedFormulaCreator(SignedFormulaCreator signedFormulaCreator) {
         this.signedFormulaCreator = signedFormulaCreator;
+    }
+
+    /**
+     * Sets the IPL Context for this problem.
+     * 
+     * @param context the Context to use for IPL label management
+     */
+    public void setIPLContext(Context context) {
+        this.iplContext = context;
+    }
+
+    /**
+     * @return the IPL Context used by this problem, or null if not set
+     */
+    public Context getIPLContext() {
+        return iplContext;
+    }
+
+    /**
+     * @return true if this problem has an IPL Context assigned
+     */
+    public boolean hasIPLContext() {
+        return iplContext != null;
     }
 }

@@ -81,4 +81,6 @@ public class SubformulaConnectiveRoleGetter implements KESignedFormulaGetter, Su
                         substituted, replacement));
     }
 
+
+
 }
