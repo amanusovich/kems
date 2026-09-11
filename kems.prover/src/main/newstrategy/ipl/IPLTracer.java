@@ -29,7 +29,6 @@ public class IPLTracer {
         RULE_BLOCKED,
         PB_APPLIED,
         PB_SKIPPED,
-        PROPAGATION,
         CLOSURE,
         RINSTANCE_REGISTERED,
         LABEL_REGISTERED,
@@ -172,12 +171,6 @@ public class IPLTracer {
                reason);
     }
 
-    public void logPropagation(String formula, String fromLabel, String toLabel) {
-        record(EventType.PROPAGATION,
-               "PROPAGATE " + formula,
-               fromLabel + " -> " + toLabel);
-    }
-
     public void logClosure(String tFormula, String fFormula, String labelRelation) {
         record(EventType.CLOSURE,
                "CLOSURE",
@@ -263,13 +256,6 @@ public class IPLTracer {
                   .append(": ").append(e.getMessage()).append("\n");
                 if (e.getDetail() != null) {
                     sb.append(prefix).append("  Reason: ").append(e.getDetail()).append("\n");
-                }
-                break;
-            case PROPAGATION:
-                sb.append(prefix).append("Step ").append(e.getStep())
-                  .append(": ").append(e.getMessage()).append("\n");
-                if (e.getDetail() != null) {
-                    sb.append(prefix).append("  ").append(e.getDetail()).append("\n");
                 }
                 break;
             case CLOSURE:

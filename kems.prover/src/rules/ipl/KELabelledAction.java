@@ -50,7 +50,7 @@ public class KELabelledAction extends rules.KEAction {
 
 	public LabelledFormula getLabelledFormula( SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList lfl) {
-		// Verificación segura para IPL
+		// Safe check for IPL
 		LabelledFormulaFactory lff;
 		if (sff instanceof LabelledFormulaFactory) {
 			lff = (LabelledFormulaFactory) sff;
@@ -63,7 +63,7 @@ public class KELabelledAction extends rules.KEAction {
 
 	public LabelledFormula getLabelledFormula( SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList lfl, FormulaLabel label) {
-		// Verificación segura para IPL
+		// Safe check for IPL
 		LabelledFormulaFactory lff;
 		if (sff instanceof LabelledFormulaFactory) {
 			lff = (LabelledFormulaFactory) sff;

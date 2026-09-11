@@ -35,6 +35,23 @@ import logic.signedFormulas.SignedFormulaList;
  * 
  */
 public class IPLSimpleStrategy extends AbstractSimpleStrategy {
+
+    /**
+     * When PB is applied relative to the selection loop; see
+     * {@link IPLCanonicalStrategyImplementation.PBPolicy} for the measured trade-off.
+     * Defaults to DEFERRED, which decides 113 of the 274 ILTP propositional problems
+     * against IMMEDIATE's 98.
+     */
+    private IPLCanonicalStrategyImplementation.PBPolicy pbPolicy =
+            IPLCanonicalStrategyImplementation.PBPolicy.DEFERRED;
+
+    public void setPbPolicy(IPLCanonicalStrategyImplementation.PBPolicy pbPolicy) {
+        this.pbPolicy = pbPolicy;
+    }
+
+    public IPLCanonicalStrategyImplementation.PBPolicy getPbPolicy() {
+        return pbPolicy;
+    }
     
     /**
      * @param method
@@ -54,8 +71,8 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
         // initialize proof transformations
         List<IProofTransformation> proofTransformations = new ArrayList<IProofTransformation>();
         
-        // ✅ HABILITADO: PBRuleApplicator específico para IPL como último recurso
-        // Se aplica cuando reglas de 2 premisas no pueden aplicarse por falta de premisa menor
+        // ENABLED: PBRuleApplicator specific to IPL, used as a last resort
+        // Applied when two-premise rules cannot fire because the minor premise is missing
         IPLPBRuleApplicator pbr = new IPLPBRuleApplicator(this, IPLRuleStructures.TWO_PREMISE_RULE_LIST);
         proofTransformations.add(pbr);
         
@@ -72,9 +89,10 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
      * T TOP / F BOTTOM nodes that {@link AbstractSimpleStrategy#createProofTree}
      * prepends to every proof tree for classical-style strategies. Those
      * nodes are not part of the IPL system of [labeled-ke-ipl] and have
-     * no functional role in the canonical procedure
-     * ({@link IPLCanonicalStrategyImplementation} skips them via
-     * {@code isTopOrBottom()}). The IPL proof tree starts with the input
+     * no functional role in the canonical procedure: since this override
+     * replaces the parent factory method entirely, no TOP/BOTTOM node is
+     * ever created, so {@link IPLCanonicalStrategyImplementation} does not
+     * need to guard against them. The IPL proof tree starts with the input
      * problem formula as its root, with origin {@code PROBLEM}.
      */
     @Override
@@ -96,22 +114,22 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
 
     @Override
     public SignedFormulaList getLocalReferences(IClassicalProofTree proofTree, Formula formula) {
-        // Para IPL, implementamos una versión simplificada que no depende de FormulaReferenceClassicalProofTree
-        // TODO: Implementar correctamente para IPL si es necesario
+        // For IPL, we implement a simplified version that does not depend on FormulaReferenceClassicalProofTree
+        // TODO: implement properly for IPL if needed
         return new SignedFormulaList();
     }
 
     @Override
     public FormulaList getSubformulaLocalReferences(IClassicalProofTree proofTree, Formula formula, SignedFormula sf) {
-        // Para IPL, implementamos una versión simplificada que no depende de FormulaReferenceClassicalProofTree
-        // TODO: Implementar correctamente para IPL si es necesario
+        // For IPL, we implement a simplified version that does not depend on FormulaReferenceClassicalProofTree
+        // TODO: implement properly for IPL if needed
         return new FormulaList();
     }
 
     @Override
     public SignedFormulaList getParentReferences(IClassicalProofTree proofTree, Formula formula) {
-        // Para IPL, implementamos una versión simplificada que no depende de FormulaReferenceClassicalProofTree
-        // TODO: Implementar correctamente para IPL si es necesario
+        // For IPL, we implement a simplified version that does not depend on FormulaReferenceClassicalProofTree
+        // TODO: implement properly for IPL if needed
         return new SignedFormulaList();
     }
     
@@ -144,7 +162,8 @@ public class IPLSimpleStrategy extends AbstractSimpleStrategy {
         }
         
         // Use the canonical strategy implementation instead of the default one
-        IPLCanonicalStrategyImplementation canonical = new IPLCanonicalStrategyImplementation();
+        IPLCanonicalStrategyImplementation canonical =
+                new IPLCanonicalStrategyImplementation(pbPolicy);
         return canonical.execute(this, sfb);
     }
     

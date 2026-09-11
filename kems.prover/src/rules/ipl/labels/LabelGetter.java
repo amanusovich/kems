@@ -8,7 +8,6 @@ public abstract class LabelGetter {
 	public static final LabelGetter MAIN = new MainLabelGetter();
 	public static final LabelGetter AUX = new AuxiliarLabelGetter();
 	public static final LabelGetter NEW = new NewLabelGetter();
-	public static final LabelGetter GLOBAL_NEW = new NewLabelGetter(NewLabelGetter.GLOBAL_NEW);
-	
+
 	public abstract FormulaLabel getLabel(SignedFormulaList lfl);
 }

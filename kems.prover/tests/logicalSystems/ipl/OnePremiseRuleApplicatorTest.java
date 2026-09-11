@@ -141,7 +141,7 @@ public class OnePremiseRuleApplicatorTest {
 
     }
 
-    // Regla 5?
+    // Rule 5?
     //addToOnePremiseRules(IPLSigns.TRUE, IPLConnectives.NOT, IPLRules.T_NOT_A_OR_B);
     @Test
     public void testRule05() {
@@ -180,7 +180,7 @@ public class OnePremiseRuleApplicatorTest {
     }
 
     
-    // Regla 14
+    // Rule 14
     //addToOnePremiseRules(IPLSigns.FALSE, IPLConnectives.IMPLIES, IPLRules.F_A_IMPLIES_B_TA_FB);
     @Test
     public void testRule14() {
@@ -227,7 +227,7 @@ public class OnePremiseRuleApplicatorTest {
 
     }
     
-    // Regla 15
+    // Rule 15
     //addToOnePremiseRules(IPLSigns.FALSE, IPLConnectives.NOT, IPLRules.F_NOT_A_IMPLIES_B_TA_FB);
     @Test
     public void testRule15() {
@@ -273,7 +273,7 @@ public class OnePremiseRuleApplicatorTest {
 
     }
     
-    // Regla 17
+    // Rule 17
     //addToOnePremiseRules(IPLSigns.FALSE, IPLConnectives.NOT, IPLRules.F_NOT);
     @Test
     public void testRule17() {
@@ -308,13 +308,13 @@ public class OnePremiseRuleApplicatorTest {
 
         System.out.println(cpt.getNumberOfNodes());
         assertTrue(cpt.getNumberOfNodes() == 3);
-        
-        // TODO: bien pero deberia ser c1 para las dos conclusiones
+
+        // TODO: correct, but should be c1 for both conclusions
 
     }
-    
-    
-    // Regla 18
+
+
+    // Rule 18
     //addToOnePremiseRules(IPLSigns.FALSE, IPLConnectives.NOT, IPLRules.T_NOT_NOT);
     @Test
     public void testRule18() {
@@ -350,10 +350,10 @@ public class OnePremiseRuleApplicatorTest {
 
         System.out.println(cpt.getNumberOfNodes());
         assertTrue(cpt.getNumberOfNodes() == 3);
-        
-        // TODO: bien pero deberia ser c1 para las dos conclusiones
+
+        // TODO: correct, but should be c1 for both conclusions
 
     }
-    
-    
+
+
 }

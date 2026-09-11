@@ -49,8 +49,8 @@ public class LabelledFormula  extends SignedFormula {
 	}
 	
     public String toString() {
-    	// LabelledFormula hereda de SignedFormula, que ya maneja las etiquetas
-    	// Usar el toString() del padre (SignedFormula) directamente
+    	// LabelledFormula inherits from SignedFormula, which already handles labels
+    	// Use the parent's (SignedFormula) toString() directly
     	String sign = this.getSign().toString();
     	String formula = this.getFormula().toString();
     	String label = this.getLabel() != null ? " " + this.getLabel().toString() : "";

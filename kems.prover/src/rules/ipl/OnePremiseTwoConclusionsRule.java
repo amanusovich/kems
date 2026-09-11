@@ -36,7 +36,7 @@ public class OnePremiseTwoConclusionsRule extends IPLRule {
 	@Override
 	public SignedFormulaList getPossibleConclusions(SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList sfl) {
-        // Verificación segura para IPL
+        // Safe check for IPL
         LabelledFormulaFactory lff;
         if (sff instanceof LabelledFormulaFactory) {
             lff = (LabelledFormulaFactory) sff;

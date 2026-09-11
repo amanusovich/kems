@@ -88,16 +88,16 @@ public class FormulaLabel implements Comparable<FormulaLabel>{
 	}
 
     public FormulaLabel getGreaterFormulaLabel() {
-		// Para IPL: crear una nueva etiqueta con índice mayor
+		// For IPL: create a new label with a higher index
 		return new FormulaLabel(this.type, this.index + 1);
     }
 
 	public FormulaLabel getLowerFormulaLabel() {
-		// Para IPL: crear una nueva etiqueta con índice menor (si es posible)
+		// For IPL: create a new label with a lower index (if possible)
 		if (this.index > 0) {
 			return new FormulaLabel(this.type, this.index - 1);
 		} else {
-			// Si ya es el índice 0, devolver una nueva etiqueta c0
+			// Already at index 0, return a new c0 label
 			return new FormulaLabel(this.type, 0);
 		}
 	}

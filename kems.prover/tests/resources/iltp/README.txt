@@ -11,8 +11,6 @@ into Problems/<Domain>/ (see ILTP directory layout).
 Tests resolve paths from working directory kems.prover/ or repository root
 (see IltpPropBenchmarkTest.resolveProblem).
 
-Repeatable timings for the LANMR paper (warmup + median of 5 runs):
-  Run logicalSystems.ipl.IltpBenchmarkRunner.main from IntelliJ
-  (working directory kems.prover). Copy median_ms and nodes into
-  paper-lanmr2026/sections/05-evaluation.tex.
-  Do not use the web UI "Done in Xs" timer for the table.
+Benchmarks (selected instances and the full-library sweep) are reproduced with the
+scripts in benchmarks/ at the repository root; results live in benchmarks/results/.
+Do not use the web UI "Done in Xs" timer for any figure.

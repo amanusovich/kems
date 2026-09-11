@@ -76,7 +76,7 @@ public class TwoPremisesRuleApplicatorTest {
     }
 
     
-//  // Regla 3
+//  // Rule 3
 //  addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
 //          IPLSigns.FALSE, IPLRules.X_OR_F_LEFT);
     @Test
@@ -127,7 +127,7 @@ public class TwoPremisesRuleApplicatorTest {
 
 //    
 
-//    // Regla 4
+//    // Rule 4
 //    addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_OR_F_RIGHT);
     @Test
@@ -178,7 +178,7 @@ public class TwoPremisesRuleApplicatorTest {
 
     
     
-//    // Regla 6
+//    // Rule 6
 //    addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_A_OR_B);
     @Test
@@ -229,7 +229,7 @@ public class TwoPremisesRuleApplicatorTest {
     
     
     
-//    // Regla 7
+//    // Rule 7
 //    addToTwoPremiseRules(IPLConnectives.OR, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_A_OR_B_NOT_B);
 //    
@@ -278,7 +278,7 @@ public class TwoPremisesRuleApplicatorTest {
     }
 
     
-    //    // Regla 8
+    //    // Rule 8
 //    addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.F_AND_LEFT);
     @Test
@@ -328,7 +328,7 @@ public class TwoPremisesRuleApplicatorTest {
 
     
     
-    //    // Regla 9
+    //    // Rule 9
 //    addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.X_AND_T_RIGHT);
     
@@ -378,7 +378,7 @@ public class TwoPremisesRuleApplicatorTest {
     }
     
     
-//    // Regla 10
+//    // Rule 10
 //    addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_NOT_A_AND_B);
 
@@ -429,7 +429,7 @@ public class TwoPremisesRuleApplicatorTest {
     
     
     
-//    // Regla 11
+//    // Rule 11
 //    addToTwoPremiseRules(IPLConnectives.AND, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_NOT_AND_LEFT);
     @Test
@@ -479,7 +479,7 @@ public class TwoPremisesRuleApplicatorTest {
     
         
 //    
-//    // Regla 12
+//    // Rule 12
 //    addToTwoPremiseRules(IPLConnectives.IMPLIES, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_IMPLIES_LEFT);
     @Test
@@ -575,7 +575,7 @@ public class TwoPremisesRuleApplicatorTest {
         assertTrue(cpt.getNumberOfNodes() == 4);
 
     }
-    //    // Regla 16
+    //    // Rule 16
 //    addToTwoPremiseRules(IPLConnectives.IMPLIES, KERuleRole.LEFT,
 //            IPLSigns.FALSE, IPLRules.T_X_IMPLIES_Y_NOT_Y);
     

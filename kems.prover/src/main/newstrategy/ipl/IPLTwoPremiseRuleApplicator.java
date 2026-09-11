@@ -33,9 +33,9 @@ import rules.structures.IPLConnectiveRoleSignRuleList;
 
 /**
  * A two premise rule applicator
- * 
+ *
  * @author Adolfo Gustavo Serra Seca Neto
- * 
+ *
  */
 public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
@@ -61,14 +61,14 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @seemain.strategy.applicator.IRuleApplicator#applyAll(main.strategy.
 	 * ClassicalProofTree, logic.signedFormulas.SignedFormulaBuilder)
 	 */
 	/**
 	 * Applies a two-premise rule to a single specific formula.
 	 * This method is used by the canonical algorithm implementation.
-	 * 
+	 *
 	 * @param current the proof tree
 	 * @param sfb the signed formula builder
 	 * @param mainCandidate the specific formula to process
@@ -78,20 +78,20 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 		if (!(mainCandidate.getFormula() instanceof CompositeFormula)) {
 			return false;
 		}
-		
-		Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
-		if (!(ruleListObject instanceof IPLConnectiveRoleSignRuleList)) {
-			return false;
-		}
-		
-		IPLConnectiveRoleSignRuleList twoPremiseRules = (IPLConnectiveRoleSignRuleList) ruleListObject;
-		
+
+		// strategy.getMethod().getRules().get(ruleListName) is always an
+		// IPLConnectiveRoleSignRuleList: ruleListName is always
+		// IPLRuleStructures.TWO_PREMISE_RULE_LIST (see IPLSimpleStrategy's
+		// constructor), which IPLRuleStructures always registers as one.
+		IPLConnectiveRoleSignRuleList twoPremiseRules =
+				(IPLConnectiveRoleSignRuleList) strategy.getMethod().getRules().get(ruleListName);
+
 		Connective mainConnective = ((CompositeFormula) mainCandidate.getFormula()).getConnective();
 		FormulaSign mainSign = mainCandidate.getSign();
-		
+
 		List<Rule> leftRules = twoPremiseRules.getMany(mainConnective, KERuleRole.LEFT, mainSign);
 		List<Rule> rightRules = twoPremiseRules.getMany(mainConnective, KERuleRole.RIGHT, mainSign);
-		
+
 		// Try LEFT rules first
 		for (Rule left_rule : leftRules) {
 			if (left_rule != null) {
@@ -101,7 +101,7 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 				}
 			}
 		}
-		
+
 		// Try RIGHT rules
 		for (Rule right_rule : rightRules) {
 			if (right_rule != null) {
@@ -111,31 +111,22 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 				}
 			}
 		}
-		
+
 		// No rule was applied (likely missing auxiliary premise)
 		// DON'T mark as ANALYSED here - let the canonical algorithm decide
 		return false;
 	}
-	
+
 	public boolean applyAll(ClassicalProofTree current, SignedFormulaBuilder sfb) {
-		// faz o seguinte:
-		// para cada main, procurar referencias a um dos dois possiveis
-		// auxiliary candidates
-		// se encontrar, entao aplicar
+		// For each main candidate, look for references to one of the two possible
+		// auxiliary candidates; if found, apply the rule
 		boolean hasApplied = false;
 
-		Object ruleListObject = strategy.getMethod().getRules().get(ruleListName);
-		
-		// Verificar que sea realmente un IPLConnectiveRoleSignRuleList
-		if (!(ruleListObject instanceof IPLConnectiveRoleSignRuleList)) {
-			return false;
-		}
-		
-		IPLConnectiveRoleSignRuleList twoPremiseRules = (IPLConnectiveRoleSignRuleList) ruleListObject;
+		IPLConnectiveRoleSignRuleList twoPremiseRules =
+				(IPLConnectiveRoleSignRuleList) strategy.getMethod().getRules().get(ruleListName);
 
 		SignedFormula mainCandidate;
 
-		// TODO EH ISSO MESMO?
 		initializeMainCandidates(current, null);
 
 		while ((mainCandidate = nextMainCandidate(strategy.getProofTree(), null)) != null) {
@@ -150,13 +141,13 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			Rule right_rule = twoPremiseRules.get(mainConnective,
 					KERuleRole.RIGHT, mainSign);
 			*/
-			
+
 			List<Rule> leftRules = twoPremiseRules.getMany(mainConnective,
 					KERuleRole.LEFT, mainSign);
 			List<Rule> rightRules = twoPremiseRules.getMany(mainConnective,
 					KERuleRole.RIGHT, mainSign);
-			
-	// Procesar reglas LEFT
+
+	// Process LEFT rules
 	boolean appliedAny = false;
 	for (Iterator<Rule> it = leftRules.iterator(); it.hasNext() && !appliedAny;) {
 		Rule left_rule = it.next();
@@ -169,8 +160,8 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			}
 		}
 	}
-	
-	// Procesar reglas RIGHT (solo si no se aplicó ninguna LEFT)
+
+	// Process RIGHT rules (only if no LEFT rule applied)
 	if (!appliedAny) {
 		for (Iterator<Rule> it2 = rightRules.iterator(); it2.hasNext() && !appliedAny;) {
 			Rule right_rule = it2.next();
@@ -184,13 +175,10 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			}
 		}
 	}
-	
-	// Si no se aplicó ninguna regla (porque falta la premisa auxiliar),
-	// marcar como ANALYSED para que PB pueda generar la premisa faltante
-	if (!appliedAny && (leftRules.size() > 0 || rightRules.size() > 0)) {
-		strategy.getCurrent().removeFromPBCandidates(mainCandidate, SignedFormulaNodeState.ANALYSED);
-	}
-	
+
+	// If no rule was applied the auxiliary premise is missing; PB will generate it
+	// once selection can no longer make progress (see IPLPBRuleApplicator).
+
 	hasApplied = hasApplied || appliedAny;
 
 			/*
@@ -215,41 +203,41 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			*/
 
 		}
-		
-		// SEGUNDA PASADA: Procesar fórmulas ancestros accesibles
-		// Esto permite que reglas de dos premisas se apliquen con nuevas premisas auxiliares
-		// creadas en ramas descendientes
+
+		// SECOND PASS: process accessible ancestor formulas
+		// This allows two-premise rules to fire against new auxiliary premises
+		// created in descendant branches
 		boolean hasAppliedFromAncestors = processAncestorCandidates(current, sfb, twoPremiseRules);
 		hasApplied = hasApplied || hasAppliedFromAncestors;
 
 		return hasApplied;
 	}
-	
+
 	/**
-	 * Procesa candidatos de ramas ancestros con reglas de dos premisas.
-	 * Solo procesa fórmulas que tienen reglas de dos premisas disponibles.
-	 * Retorna true si se aplicó alguna regla.
+	 * Processes candidates from ancestor branches with two-premise rules.
+	 * Only processes formulas that have two-premise rules available.
+	 * Returns true if some rule was applied.
 	 */
-	private boolean processAncestorCandidates(ClassicalProofTree proofTree, 
+	private boolean processAncestorCandidates(ClassicalProofTree proofTree,
 	                                          SignedFormulaBuilder sfb,
 	                                          IPLConnectiveRoleSignRuleList twoPremiseRules) {
 		boolean hasApplied = false;
-		
-		// Obtener candidatos ancestros (sin duplicar los de la rama actual)
+
+		// Get ancestor candidates (without duplicating the current branch's)
 		PBCandidateList ancestorCandidates = new PBCandidateList();
 		collectAncestorCandidates(proofTree, twoPremiseRules, ancestorCandidates);
-		
-		// Procesar cada candidato ancestro
+
+		// Process each ancestor candidate
 		for (int i = 0; i < ancestorCandidates.size() && !hasApplied; i++) {
 			SignedFormula mainCandidate = ancestorCandidates.get(i);
-			
+
 			Connective mainConnective = ((CompositeFormula) mainCandidate.getFormula()).getConnective();
 			FormulaSign mainSign = mainCandidate.getSign();
-			
+
 			List<Rule> leftRules = twoPremiseRules.getMany(mainConnective, rules.KERuleRole.LEFT, mainSign);
 			List<Rule> rightRules = twoPremiseRules.getMany(mainConnective, rules.KERuleRole.RIGHT, mainSign);
-			
-			// Intentar aplicar reglas LEFT
+
+			// Try to apply LEFT rules
 			for (Iterator<Rule> it = leftRules.iterator(); it.hasNext() && !hasApplied;) {
 				Rule rule = it.next();
 				hasApplied = tryToApplyTwoPremiseRule(proofTree, sfb, mainCandidate, rule);
@@ -259,8 +247,8 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 					}
 				}
 			}
-			
-			// Intentar aplicar reglas RIGHT (solo si no se aplicó LEFT)
+
+			// Try to apply RIGHT rules (only if LEFT did not apply)
 			if (!hasApplied) {
 				for (Iterator<Rule> it = rightRules.iterator(); it.hasNext() && !hasApplied;) {
 					Rule rule = it.next();
@@ -273,75 +261,75 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 				}
 			}
 		}
-		
+
 		return hasApplied;
 	}
-	
+
 	/**
-	 * Colecta fórmulas compuestas de ramas ancestros que:
-	 * 1. Tienen reglas de dos premisas disponibles
-	 * 2. Son accesibles en la rama actual
-	 * 3. No están ya en mainCandidates (evita duplicados)
+	 * Collects composite formulas from ancestor branches that:
+	 * 1. Have two-premise rules available
+	 * 2. Are accessible from the current branch
+	 * 3. Are not already in mainCandidates (avoids duplicates)
 	 */
 	private void collectAncestorCandidates(ClassicalProofTree proofTree,
 	                                        IPLConnectiveRoleSignRuleList twoPremiseRules,
 	                                        PBCandidateList ancestorCandidates) {
-		// Iterar sobre todas las fórmulas en el árbol
+		// Iterate over every formula in the tree
 		main.proofTree.iterator.IProofTreeVeryBasicIterator it = proofTree.getTopDownIterator();
-		
+
 		while (it.hasNext()) {
 			main.proofTree.INode node = it.next();
-			
+
 			if (!(node instanceof SignedFormulaNode)) {
 				continue;
 			}
-			
+
 			SignedFormulaNode sfNode = (SignedFormulaNode) node;
 			SignedFormula sf = (SignedFormula) sfNode.getContent();
-			
-			// Solo fórmulas compuestas
+
+			// Composite formulas only
 			if (!(sf.getFormula() instanceof logic.formulas.CompositeFormula)) {
 				continue;
 			}
-			
+
 			logic.formulas.CompositeFormula compFormula = (logic.formulas.CompositeFormula) sf.getFormula();
-			
-			if (sf.getFormula().toString().equals("TOP") || 
+
+			if (sf.getFormula().toString().equals("TOP") ||
 			    sf.getFormula().toString().equals("BOTTOM")) {
 				continue;
 			}
-			
-			// Solo agregar si tiene reglas de dos premisas
+
+			// Only add it if it has two-premise rules
 			java.util.List<Rule> leftRules = twoPremiseRules.getMany(
-				compFormula.getConnective(), 
-				rules.KERuleRole.LEFT, 
+				compFormula.getConnective(),
+				rules.KERuleRole.LEFT,
 				sf.getSign());
 			java.util.List<Rule> rightRules = twoPremiseRules.getMany(
-				compFormula.getConnective(), 
-				rules.KERuleRole.RIGHT, 
+				compFormula.getConnective(),
+				rules.KERuleRole.RIGHT,
 				sf.getSign());
-			
+
 			if (leftRules.isEmpty() && rightRules.isEmpty()) {
 				continue;
 			}
-			
-			// Verificar accesibilidad de etiqueta
-			if (proofTree instanceof logicalSystems.ipl.IPLProofTree) {
-				logicalSystems.ipl.IPLProofTree iplTree = (logicalSystems.ipl.IPLProofTree) proofTree;
-				if (sf instanceof logic.labelledFormulas.LabelledFormula) {
-					logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
-					if (!iplTree.isLabelAccessible(lf.getLabel())) {
-						continue;
-					}
+
+			// Check label accessibility (proofTree is always an IPLProofTree: this
+			// applicator is only ever instantiated by IPLSimpleStrategy, whose
+			// createPTInstance() always constructs IPLProofTree nodes)
+			logicalSystems.ipl.IPLProofTree iplTree = (logicalSystems.ipl.IPLProofTree) proofTree;
+			if (sf instanceof logic.labelledFormulas.LabelledFormula) {
+				logic.labelledFormulas.LabelledFormula lf = (logic.labelledFormulas.LabelledFormula) sf;
+				if (!iplTree.isLabelAccessible(lf.getLabel())) {
+					continue;
 				}
 			}
-			
-			// No agregar si ya está en mainCandidates
+
+			// Do not add it if it is already in mainCandidates
 			if (mainCandidates.contains(sf)) {
 				continue;
 			}
-			
-			// No agregar duplicados
+
+			// Do not add duplicates
 			if (!ancestorCandidates.contains(sf)) {
 				ancestorCandidates.add(sf);
 			}
@@ -349,17 +337,17 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 	}
 
 	/**
-	 * Inicializa los candidatos principales para reglas de dos premisas.
-	 * Solo incluye candidatos de la rama actual (getPBCandidates).
-	 * Los ancestros se procesan por separado después del loop principal.
+	 * Initializes the main candidates for two-premise rules.
+	 * Only includes candidates from the current branch (getPBCandidates).
+	 * Ancestors are processed separately after the main loop.
 	 */
 	private void initializeMainCandidates(ClassicalProofTree proofTree,
 			Object object) {
-		// Solo candidatos de la rama actual
+		// Only candidates from the current branch
 		mainCandidates = proofTree.getPBCandidates();
 		counterMainCandidates = 0;
 	}
-	
+
 	protected SignedFormula nextMainCandidate(ClassicalProofTree proofTree,
 			SignedFormula auxCandidate) {
 		if (counterMainCandidates < mainCandidates.size()) {
@@ -384,20 +372,20 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
 		TwoPremisesOneConclusionRule aRule = ((TwoPremisesOneConclusionRule) rule);
 
-		// Verificar que el factory sea realmente LabelledFormulaFactory para IPL
+		// Check that the factory is really a LabelledFormulaFactory for IPL
 		SignedFormulaFactory signedFactory = sfb.getSignedFormulaFactory();
 		LabelledFormulaFactory labelledFactory;
-		
+
 		if (signedFactory instanceof LabelledFormulaFactory) {
 			labelledFactory = (LabelledFormulaFactory) signedFactory;
 		} else {
-			// Para IPL, crear una LabelledFormulaFactory si no existe
+			// For IPL, create a LabelledFormulaFactory if none exists
 			labelledFactory = new LabelledFormulaFactory();
 		}
-		
+
 		SignedFormulaList sfl = aRule.getAuxiliaryCandidates(
 				labelledFactory,
-				sfb.getSignedFormulaFactory(), 
+				sfb.getSignedFormulaFactory(),
 				sfb.getFormulaFactory(),
 				mainCandidate);
 
@@ -407,23 +395,23 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			return _premise.getAuxiliaryCandidates(lff, sff, ff, sfMain);
 		}
 		*/
-		
+
 		SignedFormulaList result = getReferences(proofTree, sfl);
 
 		if (result.size() > 0) {
-			// Iterar sobre TODOS los candidatos auxiliares encontrados
-			// hasta que uno satisfaga la condición de etiquetas y la regla se aplique
+			// Iterate over ALL auxiliary candidates found until one satisfies
+			// the label condition and the rule applies
 			for (int i = 0; i < result.size() && !hasApplied; i++) {
 				SignedFormula auxCandidate = (SignedFormula) result.get(i);
 
-				// Crear una NUEVA lista con solo el candidato auxiliar actual
-				// para evitar que se acumulen elementos en 'result'
+				// Build a NEW list with only the current auxiliary candidate
+				// so elements do not keep accumulating in 'result'
 				SignedFormulaList cleanList = new SignedFormulaList();
 				cleanList.add(auxCandidate);
-				
+
 				hasApplied = applyTwoPremiseRule(proofTree, sfb, mainCandidate,
 						aRule, cleanList, auxCandidate);
-				
+
 				if (hasApplied) {
 					if (IPLTracer.isEnabled()) {
 						tracer.logInfo("Two-premise rule applied with candidate #" + i);
@@ -439,7 +427,7 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
 	/**
 	 * Applies a two premise rulem given:
-	 * 
+	 *
 	 * @param proofTree
 	 * @param sfb
 	 * @param mainCandidate
@@ -453,48 +441,41 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 			TwoPremisesOneConclusionRule aRule, SignedFormulaList sfl,
 			SignedFormula auxCandidate) {
 		boolean hasApplied = false;
-		
-		// Verificar rinstances para evitar bucles
+
+		// proofTree is always an IPLProofTree: this applicator is only ever
+		// instantiated by IPLSimpleStrategy, whose createPTInstance() always
+		// constructs IPLProofTree nodes.
+		IPLProofTree iplTree = (IPLProofTree) proofTree;
+
+		// Check rinstances to prevent loops
 		String ruleInstance = createRuleInstanceKey(aRule.toString(), mainCandidate, auxCandidate);
-		if (proofTree instanceof IPLProofTree) {
-			IPLProofTree iplTree = (IPLProofTree) proofTree;
-			if (iplTree.wasRuleInstanceApplied(ruleInstance)) {
-				if (IPLTracer.isEnabled()) {
-					tracer.logRuleBlocked(aRule.toString(), mainCandidate.toString(),
-							"rinstance exists: " + ruleInstance);
-				}
-				return false; // No aplicar, ya fue aplicada
+		if (iplTree.wasRuleInstanceApplied(ruleInstance)) {
+			if (IPLTracer.isEnabled()) {
+				tracer.logRuleBlocked(aRule.toString(), mainCandidate.toString(),
+						"rinstance exists: " + ruleInstance);
 			}
+			return false; // Do not apply, it was already applied
 		}
-		
+
 		sfl.add(0, mainCandidate);
 		SignedFormulaList conclusion = (aRule.getPossibleConclusions(sfb
 				.getSignedFormulaFactory(), sfb.getFormulaFactory(), sfl));
 
-		// TODO sup�e apenas uma conclus�o
+		// TODO assumes only one conclusion
 		if (conclusion != null && conclusion.size() > 0) {
 			SignedFormula conclusionFormula = (SignedFormula) conclusion.get(0);
 			boolean conclusionExists = proofTree.getNode(conclusionFormula) != null;
-			
-			// Registrar en rinstances SIEMPRE que se genere una conclusión
-			// (incluso si ya existe en el árbol) para evitar reintentos infinitos
-			if (proofTree instanceof IPLProofTree) {
-				IPLProofTree iplTree = (IPLProofTree) proofTree;
-				iplTree.registerRuleInstance(ruleInstance);
-			}
-			
+
+			// Always register in rinstances when a conclusion is generated
+			// (even if it already exists in the tree) to prevent infinite retries
+			iplTree.registerRuleInstance(ruleInstance);
+
 			if (!conclusionExists) {
-				// Solo añadir al árbol si no existe
-				proofTree.addLast(new SignedFormulaNode(conclusionFormula, 
+				// Only add it to the tree if it does not already exist
+				proofTree.addLast(new SignedFormulaNode(conclusionFormula,
 						SignedFormulaNodeState.NOT_ANALYSED, strategy
 						.createOrigin(aRule, proofTree.getNode(mainCandidate),
 								proofTree.getNode(auxCandidate))));
-				
-				// Mark as ANALYSED unconditionally. Universal formulas (T(A→B), T(¬A))
-				// are re-selected by selectUnanalyzedFormula whenever Definition 5.6 is
-				// not yet satisfied for new accessible worlds.
-				strategy.getCurrent().removeFromPBCandidates(mainCandidate,
-						SignedFormulaNodeState.ANALYSED);
 
 				hasApplied = true;
 			}
@@ -502,70 +483,73 @@ public class IPLTwoPremiseRuleApplicator implements IRuleApplicator {
 
 		return hasApplied;
 	}
-	
+
 	/**
-	 * Crea una clave única para identificar una instancia de regla
+	 * Creates a unique key to identify a rule instance
 	 */
 	private String createRuleInstanceKey(String ruleName, SignedFormula main, SignedFormula aux) {
 		return ruleName + ":" + main.toString() + ":" + aux.toString();
 	}
 
 	/**
-	 * ⚠️ CORRECCIÓN: Busca premisas auxiliares en b (NO en b*)
-	 * 
-	 * Según Algorithm 1 línea 771: "if the corresponding minor premise of r is in b then"
-	 * Las premisas auxiliares deben estar FÍSICAMENTE en b, no solo implícitamente en b*.
-	 * 
-	 * La extensión b* se usa SOLO para:
-	 * - Verificar cierre (contradicciones)
-	 * - Verificar provisos (como F→1)
-	 * - Verificar completitud
-	 * 
-	 * Pero NO para buscar premisas auxiliares de reglas operacionales.
+	 * Looks up auxiliary premises physically in b, never by implicit
+	 * monotonicity.
+	 *
+	 * Per Algorithm 1 line 771: "if the corresponding minor premise of r is in b then"
+	 * Auxiliary premises must be PHYSICALLY in b.
+	 *
+	 * No control-flow decision in the algorithm depends on implicit
+	 * monotonicity: not closure checking (checkPhysicalBForContradiction
+	 * iterates the physical branch directly), not completeness
+	 * (isCompletelyAnalyzed is recursive, Definition 5.3), not the F->
+	 * proviso (shouldBlockFImpliesRule in IPLOnePremiseRuleApplicator), not
+	 * PB's alternative-label search (tryPBAtAlternativeLabels in
+	 * IPLPBRuleApplicator), nor the search for auxiliary premises of
+	 * operational rules here.
 	 */
 	protected SignedFormulaList getReferences(ClassicalProofTree proofTree,
 			SignedFormulaList sflInput) {
 
 		SignedFormulaList sflResult = new SignedFormulaList();
 
-		// Buscar en b (físicamente en la rama), no en b*
+		// Search in b (physically in the branch), not in the monotonic extension
 		IProofTreeVeryBasicIterator it = proofTree.getTopDownIterator();
 
 		while (it.hasNext()) {
 			SignedFormulaNode sfn = (SignedFormulaNode) it.next();
 			SignedFormula sf = (SignedFormula) sfn.getContent();
-			
+
 			if (formulaLevelContains(sflInput,sf)) {
-				// Solo agregar si no es un duplicado (misma fórmula, signo Y etiqueta)
+				// Only add it if it is not a duplicate (same formula, sign AND label)
 				if (!containsExactFormula(sflResult, sf)) {
 					sflResult.add(sf);
 				}
 			}
 		}
-		
+
 		return sflResult;
 	}
-	
+
 	private boolean formulaLevelContains(SignedFormulaList aList, SignedFormula aSignedFormula) {
-		
+
 		for (SignedFormula listFormula : aList.getList()) {
 			if (listFormula.getFormula().equals(aSignedFormula.getFormula()) &&
 				listFormula.getSign().equals(aSignedFormula.getSign())	) {
 				return true;
 			}
-			
+
 		}
-		
+
 		return false;
 	}
-	
+
 	/**
-	 * Verifica si la lista contiene una fórmula con exactamente el mismo signo, fórmula Y etiqueta.
-	 * Esto es para evitar duplicados en getReferences.
+	 * Checks whether the list contains a formula with exactly the same sign, formula AND label.
+	 * This is to avoid duplicates in getReferences.
 	 */
 	private boolean containsExactFormula(SignedFormulaList aList, SignedFormula aSignedFormula) {
 		for (SignedFormula listFormula : aList.getList()) {
-			// Comparar signo, fórmula Y etiqueta (si aplica)
+			// Compare sign, formula AND label (if applicable)
 			if (listFormula.toString().equals(aSignedFormula.toString())) {
 				return true;
 			}

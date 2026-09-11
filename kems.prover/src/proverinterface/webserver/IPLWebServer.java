@@ -155,6 +155,8 @@ public final class IPLWebServer {
             String body = readAll(ex.getRequestBody());
             String formula = extractJsonString(body, "formula");
             String name    = extractJsonString(body, "name");
+            String pbParam = extractJsonString(body, "pb");
+            boolean immediatePB = "IMMEDIATE".equalsIgnoreCase(pbParam);
             if (formula == null || formula.trim().isEmpty()) {
                 respondJsonError(ex, 400, "Missing 'formula' field");
                 return;
@@ -162,7 +164,8 @@ public final class IPLWebServer {
 
             try {
                 String html = runProveWithTimeout(formula.trim(),
-                                                  (name != null && !name.isEmpty()) ? name : "Custom");
+                                                  (name != null && !name.isEmpty()) ? name : "Custom",
+                                                  immediatePB);
                 respondHtmlCompressed(ex, html);
             } catch (TimeoutException te) {
                 respondJsonError(ex, 504,
@@ -178,10 +181,11 @@ public final class IPLWebServer {
             }
         }
 
-        private static String runProveWithTimeout(String formula, String name) throws Exception {
+        private static String runProveWithTimeout(String formula, String name, boolean immediatePB)
+                throws Exception {
             Future<String> future = PROVER_EXECUTOR.submit(() -> {
                 synchronized (PROVER_LOCK) {
-                    return runProveBlocking(formula, name);
+                    return runProveBlocking(formula, name, immediatePB);
                 }
             });
             try {
@@ -192,7 +196,7 @@ public final class IPLWebServer {
             }
         }
 
-        private static String runProveBlocking(String formula, String name) {
+        private static String runProveBlocking(String formula, String name, boolean immediatePB) {
             SignedFormulaCreator creator = new SignedFormulaCreator("ipl");
             creator.setTwoPhases(false);
             IPLTracer.setEnabled(true);
@@ -205,6 +209,10 @@ public final class IPLWebServer {
                     RuleStructureFactory.createRulesStructure(RuleStructureFactory.IPL));
             IPLSimpleStrategy strategy = new IPLSimpleStrategy(method);
             strategy.setComparator(new InsertionOrderSignedFormulaComparator());
+            if (immediatePB) {
+                strategy.setPbPolicy(
+                        main.newstrategy.ipl.IPLCanonicalStrategyImplementation.PBPolicy.IMMEDIATE);
+            }
 
             Prover prover = new Prover();
             prover.setMethod(method);
@@ -360,7 +368,11 @@ public final class IPLWebServer {
         + "    .status.busy  { color: #555; }\n"
         + "    .iframe-wrap { background: #fff; border: 1px solid #e0e2e6; border-radius: 8px;\n"
         + "                   overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }\n"
-        + "    #result { width: 100%; height: 82vh; min-height: 700px; border: 0; display: block; }\n"
+        // No fixed height: the iframe is resized in JS to match its own content
+        // height after each load, so the whole page scrolls naturally in one
+        // place instead of trapping the proof view in a small box with its own
+        // separate internal scrollbar.
+        + "    #result { width: 100%; height: 300px; border: 0; display: block; }\n"
         + "    .placeholder { padding: 60px 40px; color: #888; font-style: italic;\n"
         + "                   text-align: center; }\n"
         + "  </style>\n"
@@ -370,7 +382,7 @@ public final class IPLWebServer {
         + "    <h1>IPL KE-tableau Prover</h1>\n"
         + "    <div class=\"subtitle\">Pick a preset or write your own formula in the internal Polish notation"
         + "      (e.g. <code>F -&gt;(-(-A) A) c0</code>). Click <strong>Solve</strong> to run the prover and view"
-        + "      the proof tree, b* extensions, rule instances and trace.</div>\n"
+        + "      the proof tree, rule instances and trace.</div>\n"
         + "  </header>\n"
         + "  <div class=\"controls\">\n"
         + "    <label for=\"example\">Preset example</label>\n"
@@ -379,6 +391,11 @@ public final class IPLWebServer {
         + "    </select>\n"
         + "    <label for=\"formula\" style=\"margin-top:16px\">Formula</label>\n"
         + "    <textarea id=\"formula\" placeholder=\"F -&gt;(-(-A) A) c0\" spellcheck=\"false\"></textarea>\n"
+        + "    <label for=\"pb\" style=\"margin-top:16px\">PB policy</label>\n"
+        + "    <select id=\"pb\">\n"
+        + "      <option value=\"DEFERRED\">Deferred \u2014 PB only once selection is exhausted (default)</option>\n"
+        + "      <option value=\"IMMEDIATE\">Immediate \u2014 PB as soon as a formula needs its minor premise</option>\n"
+        + "    </select>\n"
         + "    <div class=\"row\">\n"
         + "      <button id=\"solve\">Solve</button>\n"
         + "      <span class=\"status\" id=\"status\"></span>\n"
@@ -399,6 +416,18 @@ public final class IPLWebServer {
         + "    const solveBtn    = document.getElementById('solve');\n"
         + "    const statusEl    = document.getElementById('status');\n"
         + "    const resultEl    = document.getElementById('result');\n"
+        // The generated proof page has its own fixed-height panels (Proof Tree,
+        // Kripke Context) that manage overflow internally via pan/zoom/scroll, so
+        // its total document height is stable after load. Resize the iframe to
+        // match it once per load so the OUTER page scrolls as a single surface,
+        // instead of trapping the proof view in a small box with a separate
+        // internal scrollbar a user would have to discover on their own.
+        + "    resultEl.addEventListener('load', () => {\n"
+        + "      try {\n"
+        + "        const h = resultEl.contentDocument.documentElement.scrollHeight;\n"
+        + "        if (h > 0) resultEl.style.height = h + 'px';\n"
+        + "      } catch (e) {}\n"
+        + "    });\n"
         + "    function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = 'status ' + (cls||''); }\n"
         + "    function showPlaceholder(text) {\n"
         + "      resultEl.srcdoc = '<div class=\"placeholder\" style=\"font-family:sans-serif;padding:60px 40px;color:#888;font-style:italic;text-align:center\">' + text + '</div>';\n"
@@ -429,7 +458,7 @@ public final class IPLWebServer {
         + "        const resp = await fetch('/api/prove', {\n"
         + "          method: 'POST',\n"
         + "          headers: { 'Content-Type': 'application/json' },\n"
-        + "          body: JSON.stringify({ formula, name })\n"
+        + "          body: JSON.stringify({ formula, name, pb: document.getElementById('pb').value })\n"
         + "        });\n"
         + "        if (!resp.ok) {\n"
         + "          let msg = 'HTTP ' + resp.status;\n"

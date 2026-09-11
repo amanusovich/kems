@@ -45,7 +45,7 @@ public class SignedFormulaCreator {
 	 * @param packageName
 	 */
 	public SignedFormulaCreator(String packageName) {
-		// Para IPL, usar IPLSignedFormulaFactory que maneja ContextFormulaLabel
+		// For IPL, use IPLSignedFormulaFactory, which handles ContextFormulaLabel
 		if ("ipl".equals(packageName)) {
 			_sff = new IPLSignedFormulaFactory();
 		} else {
@@ -85,9 +85,9 @@ public class SignedFormulaCreator {
 			s
 		);
 
-		// Clonar fórmulas desde la factory del parser a nuestra factory
-		// Para IPL: IPLSignedFormulaFactory.cloneAll() convierte automáticamente a ContextFormulaLabel
-		// Para otras lógicas: SignedFormulaFactory.cloneAll() copia normalmente
+		// Clone formulas from the parser's factory into our factory
+		// For IPL: IPLSignedFormulaFactory.cloneAll() automatically converts to ContextFormulaLabel
+		// For other logics: SignedFormulaFactory.cloneAll() copies normally
 		_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
 		
 		if ("ipl".equals(_packageName)) {
@@ -125,9 +125,9 @@ public class SignedFormulaCreator {
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", s);
 			
-			// Clonar fórmulas desde la factory del parser a nuestra factory
-			// Para IPL: IPLSignedFormulaFactory.cloneAll() convierte automáticamente a ContextFormulaLabel
-			// Para otras lógicas: SignedFormulaFactory.cloneAll() copia normalmente
+			// Clone formulas from the parser's factory into our factory
+			// For IPL: IPLSignedFormulaFactory.cloneAll() automatically converts to ContextFormulaLabel
+			// For other logics: SignedFormulaFactory.cloneAll() copies normally
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
 			
 			if ("ipl".equals(_packageName)) {
@@ -139,9 +139,9 @@ public class SignedFormulaCreator {
 					+ _packageName + "Lexer", _packageName + "." + _packageName
 					+ "Parser", completeFilename);
 
-			// Clonar fórmulas desde la factory del parser a nuestra factory
-			// Para IPL: IPLSignedFormulaFactory.cloneAll() convierte automáticamente a ContextFormulaLabel
-			// Para otras lógicas: SignedFormulaFactory.cloneAll() copia normalmente
+			// Clone formulas from the parser's factory into our factory
+			// For IPL: IPLSignedFormulaFactory.cloneAll() automatically converts to ContextFormulaLabel
+			// For other logics: SignedFormulaFactory.cloneAll() copies normally
 			_sff.cloneAll(_problem.getSignedFormulaFactory(), _ff);
 			
 			if ("ipl".equals(_packageName)) {

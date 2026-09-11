@@ -4,3 +4,5 @@ kems.prover/bin/
 log.txt
 .DS_Store
 /kems.bin/exec/analysers/output/
+/build/
+/kems.export/lib/extra/

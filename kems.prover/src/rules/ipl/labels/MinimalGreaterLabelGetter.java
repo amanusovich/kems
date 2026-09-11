@@ -1,94 +1,96 @@
 package rules.ipl.labels;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 import logic.labelledFormulas.ContextFormulaLabel;
 import logic.labelledFormulas.Context;
 import logic.labelledFormulas.FormulaLabel;
 import logic.signedFormulas.SignedFormulaList;
 
 /**
- * LabelGetter que implementa la semántica IPL correcta:
- * Busca la etiqueta mínima existente que sea mayor o igual a ambas premisas.
- * Solo crea una nueva etiqueta si no existe ninguna que cumpla la condición.
+ * Conclusion label for the two-premise rules that carry a
+ * {@code GreaterBinaryRelationLabelCondition} -- T->1 of Table 2, which concludes
+ * {@code T B : ck} for a ck with {@code ci <= ck} and {@code cj <= ck}.
+ *
+ * <p>The theory leaves ck free among the constants of Cb (Definitions 3.1). This
+ * implementation returns the <em>least</em> such ck, and that choice is forced rather
+ * than arbitrary: concluding as low as possible is the strongest conclusion, since
+ * T-monotonicity carries it to every constant above.
+ *
+ * <p>The least common upper bound is simply the greater of the two premise labels.
+ * Constants are only ever introduced strictly above exactly one existing constant
+ * (NewLabelGetter is the only code path that creates them, and addRelation has no
+ * other caller), so <code>&lt;=</code> is a tree: two constants have a common upper
+ * bound only if they are already comparable, and then the upper set of the greater one
+ * has that same constant as its minimum. Two consequences matter:
+ *
+ * <ul>
+ *   <li>the conclusion always lands on one of the rule's own premise labels, hence on a
+ *       constant of Cb -- never on one introduced in a sibling branch, so this rule
+ *       cannot smuggle a foreign constant into a branch's domain;</li>
+ *   <li>there is nothing to search: scanning the whole Context for candidates and
+ *       breaking ties by index, as an earlier version did, computes exactly this.</li>
+ * </ul>
+ *
+ * Checked over the ILTP propositional library: 3054 applications, none landing on
+ * anything other than a premise label.
  */
 public class MinimalGreaterLabelGetter extends LabelGetter {
 
     @Override
     public FormulaLabel getLabel(SignedFormulaList lfl) {
         if (lfl.size() < 2) {
-            // Para reglas de una premisa, usar la etiqueta de la premisa
+            // For one-premise rules, use the premise's own label
             return lfl.get(0).getLabel();
         }
 
-        // Obtener etiquetas de ambas premisas
+        // Get the labels of both premises
         FormulaLabel label1 = lfl.get(0).getLabel();
         FormulaLabel label2 = lfl.get(1).getLabel();
-        
-        // Si trabajamos con ContextFormulaLabel, buscar en el contexto
+
+        // If we are working with ContextFormulaLabel, use the branch's own ordering
         if (label1 instanceof ContextFormulaLabel) {
             Context context = ((ContextFormulaLabel) label1).getContext();
-            return findMinimalGreaterOrEqualLabel(context, label1, label2);
+            return greaterOf(context, label1, label2);
         } else {
-            // Sin contexto, usar etiquetas simples basadas en índices
+            // Without a context, use simple index-based labels
             return findMinimalGreaterOrEqualSimple(label1, label2);
         }
     }
-    
+
     /**
-     * Determina cuál de las dos etiquetas es mayor
+     * Determines which of the two labels is greater
      */
     private FormulaLabel getMaxLabel(FormulaLabel label1, FormulaLabel label2) {
-        // Comparar por índice para etiquetas simples
+        // Compare by index for simple labels
         if (label1.getIndex() >= label2.getIndex()) {
             return label1;
         } else {
             return label2;
         }
     }
-    
+
     /**
-     * Busca la etiqueta mínima existente en el contexto que sea >= ambas premisas.
-     * Si no existe ninguna, lanza una excepción porque la regla no debería aplicarse.
-     * 
-     * IMPORTANTE: Este método asume que la condición de existencia de tal etiqueta
-     * ya fue verificada antes de intentar aplicar la regla (por ejemplo, mediante
-     * GreaterBinaryRelationLabelCondition). Si no existe, la regla simplemente
-     * no se puede aplicar.
+     * The least label that is {@code >=} both premises: the greater of the two.
+     *
+     * <p>Throws when they are incomparable. That cannot happen when the rule's own
+     * {@code GreaterBinaryRelationLabelCondition} has already been checked, which is
+     * the only way this getter is reached; the exception is there so that a future rule
+     * wired up without that condition fails loudly instead of picking a wrong label.
      */
-    private FormulaLabel findMinimalGreaterOrEqualLabel(Context context, FormulaLabel label1, FormulaLabel label2) {
-        // Buscar todas las etiquetas en el contexto que sean >= ambas premisas
-        List<FormulaLabel> candidateLabels = context.getLabels().stream()
-            .filter(label -> context.isGreaterOrEqualTo(label, label1) && context.isGreaterOrEqualTo(label, label2))
-            .collect(Collectors.toList());
-        
-        if (!candidateLabels.isEmpty()) {
-            // Encontrar la mínima entre las candidatas (menor índice)
-            FormulaLabel minimalCandidate = candidateLabels.get(0);
-            for (FormulaLabel candidate : candidateLabels) {
-                if (candidate.getIndex() < minimalCandidate.getIndex()) {
-                    minimalCandidate = candidate;
-                }
-            }
-            return minimalCandidate;
-        } else {
-            // No existe ninguna etiqueta que cumpla la condición
-            // Esto significa que la regla NO se puede aplicar
-            // La excepción indica que se intentó aplicar una regla cuando no se cumplía la condición
-            throw new RuntimeException("No candidate label found - rule condition not satisfied: " + 
-                "no label exists that is >= both " + label1 + " and " + label2);
-        }
+    private FormulaLabel greaterOf(Context context, FormulaLabel label1, FormulaLabel label2) {
+        if (context.isGreaterOrEqualTo(label2, label1)) return label2;
+        if (context.isGreaterOrEqualTo(label1, label2)) return label1;
+        throw new RuntimeException("No candidate label found - rule condition not satisfied: "
+                + label1 + " and " + label2 + " are incomparable");
     }
-    
+
     /**
-     * Para etiquetas simples sin contexto, usar lógica basada en índices
+     * For simple labels with no context, use index-based logic
      */
     private FormulaLabel findMinimalGreaterOrEqualSimple(FormulaLabel label1, FormulaLabel label2) {
         FormulaLabel maxLabel = getMaxLabel(label1, label2);
-        
-        // En este caso simple, la etiqueta máxima ya es la respuesta correcta
-        // porque asumimos que las etiquetas están en orden y la máxima ya es >= ambas
+
+        // In this simple case, the maximum label is already the correct answer,
+        // since we assume the labels are ordered and the maximum is already >= both
         return maxLabel;
     }
 }

@@ -86,12 +86,25 @@ public class IPLContextPanel extends JPanel {
             }
         }
 
+        // Only draw covering relations (Hasse diagram): skip i-j edges for which
+        // some intermediate k with i<=k<=j already exists, since those are
+        // implied by transitivity and would otherwise clutter the diagram.
         for (int i = 0; i < labels.size(); i++) {
             for (int j = 0; j < labels.size(); j++) {
                 if (i == j) continue;
                 FormulaLabel li = labelMap.get(labels.get(i));
                 FormulaLabel lj = labelMap.get(labels.get(j));
-                if (li != null && lj != null && context.isLowerOrEqualTo(li, lj)) {
+                if (li == null || lj == null || !context.isLowerOrEqualTo(li, lj)) continue;
+
+                boolean isCovering = true;
+                for (int k = 0; k < labels.size() && isCovering; k++) {
+                    if (k == i || k == j) continue;
+                    FormulaLabel lk = labelMap.get(labels.get(k));
+                    if (lk != null && context.isLowerOrEqualTo(li, lk) && context.isLowerOrEqualTo(lk, lj)) {
+                        isCovering = false;
+                    }
+                }
+                if (isCovering) {
                     edges.add(new String[]{labels.get(i), labels.get(j)});
                 }
             }

@@ -150,6 +150,7 @@ public class ProverConfigurator extends JFrame implements ActionListener {
 
 	private static final String[] IPL_STRATEGY_NAMES = new String[] {
 			"main.newstrategy.ipl.IPLSimpleStrategy",
+			"main.newstrategy.ipl.IPLImmediatePBStrategy",
 	};
 
 	private static final String[] LOGIC_NAMES = new String[] { 

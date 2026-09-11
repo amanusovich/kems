@@ -42,7 +42,7 @@ public class OnePremiseTwoConclusionsLabelOverrideRule extends OnePremiseTwoConc
 	@Override
 	public SignedFormulaList getPossibleConclusions(SignedFormulaFactory sff, FormulaFactory ff,
 			SignedFormulaList sfl) {
-        // Verificación segura para IPL - crear LabelledFormulaFactory si es necesario
+        // Safe check for IPL - create a LabelledFormulaFactory if needed
         LabelledFormulaFactory lff;
         if (sff instanceof LabelledFormulaFactory) {
             lff = (LabelledFormulaFactory) sff;
