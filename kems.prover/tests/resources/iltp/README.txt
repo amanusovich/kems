@@ -11,6 +11,6 @@ into Problems/<Domain>/ (see ILTP directory layout).
 Tests resolve paths from working directory kems.prover/ or repository root
 (see IltpPropBenchmarkTest.resolveProblem).
 
-Benchmarks (the paper's table and the full-library sweep) are reproduced with the
+Benchmarks (selected instances and the full-library sweep) are reproduced with the
 scripts in benchmarks/ at the repository root; results live in benchmarks/results/.
 Do not use the web UI "Done in Xs" timer for any figure.

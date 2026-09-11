@@ -1,14 +1,14 @@
 # Benchmarks
 
-Everything in the evaluation section of the LANMR 2026 paper is produced by the scripts
-in this directory, on the ILTP v1.1.2 propositional library shipped under
-`kems.prover/tests/resources/iltp/Problems` (274 problems: 252 SYJ, 20 SYN, 2 LCL).
+The scripts in this directory evaluate the IPL prover on the ILTP v1.1.2 propositional
+library shipped under `kems.prover/tests/resources/iltp/Problems` (274 problems: 252 SYJ, 20 SYN, 2 LCL).
 
 ## Protocol
 
 * One problem per JVM (`logicalSystems.ipl.IltpRun`), so no problem is timed with
   another one's JIT state or heap behind it. Only the prove step is timed.
-* Benchmark table: one warmup run discarded, then the median of five timed runs.
+* Benchmark table (selected instances): one warmup run discarded, then the median of
+  five timed runs.
 * Full library: a single run per problem with a 10 s wall-clock limit, once per PB
   placement (`DEFERRED`, the default, and `IMMEDIATE`).
 * Verdicts are checked against the `Status (intuit.)` field of each problem file
@@ -53,8 +53,8 @@ Deferred alone decides 19 problems (all of SYJ205 from `.003` on among them); im
 alone decides 4 (SYJ201+1.002, SYJ208+1.003, SYJ212+1.004, SYJ212+1.005).
 
 The three errors are the same under both placements: SYN915+1 and SYN916+1 use the
-constants `$true`/`$false`, for which the implemented rule set (Table 2 of the theory
-paper) has no rule, so the input is rejected; SYN007+1.014 runs out of memory.
+constants `$true`/`$false`, for which the implemented rule set (Table 2 of Solares-Rojas,
+Baldi and Rodriguez 2026) has no rule, so the input is rejected; SYN007+1.014 runs out of memory.
 
 Columns of the TSV files: `problem`, `expected` (ILTP status), `status` (`closed`,
 `open`, `timeout`, `error:<Exception>`), `ms`, `nodes`, `branches`.

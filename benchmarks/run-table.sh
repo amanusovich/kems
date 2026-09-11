@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproduces the benchmark table of the paper (Table 5): the listed problems, one JVM
+# Benchmark table over selected instances: the listed problems, one JVM
 # each, one warmup run discarded, median of five timed runs. Writes results/table.tsv.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

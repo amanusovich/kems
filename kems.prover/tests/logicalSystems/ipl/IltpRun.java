@@ -24,16 +24,15 @@ import proverinterface.RuleStructureFactory;
  * Runs the IPL prover on one ILTP problem and prints one tab-separated line:
  * <pre>problem  expected  status  ms  nodes  branches</pre>
  *
- * <p>One problem per JVM is the point: every figure in the paper's evaluation was
- * produced by invoking this class once per problem from {@code benchmarks/*.sh}, so no
- * problem is timed with another one's JIT state or heap behind it.
+ * <p>One problem per JVM is the point: {@code benchmarks/*.sh} invoke this class once per
+ * problem, so no problem is timed with another one's JIT state or heap behind it.
  *
  * <p>Two modes, selected by {@code --runs}:
  * <ul>
  *   <li>{@code --runs 1} (default): a single run under a wall-clock limit. Used for the
  *       full-library sweep; on the limit the line says {@code timeout}.</li>
  *   <li>{@code --runs N} with N &gt; 1: one warmup run is discarded, then N timed runs;
- *       the median is reported. Used for the paper's benchmark table.</li>
+ *       the median is reported. Used for the benchmark table.</li>
  * </ul>
  *
  * <p>Options: {@code --policy DEFERRED|IMMEDIATE} (default DEFERRED), {@code --limit ms}
